@@ -1,0 +1,229 @@
+(kicad_sch
+	(version 20250114)
+	(generator "eeschema")
+	(generator_version "9.0")
+	(uuid "4b1fdcf1-a19d-4728-9a21-4ed82cf33882")
+	(paper "A4")
+	(title_block
+		(title "CONTROLLER")
+		(date "2025-04-04")
+		(company "APeleV")
+	)
+	(lib_symbols)
+	(sheet
+		(at 41.91 36.83)
+		(size 62.865 44.45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "30f998da-1052-4a0c-bed1-3b742882438c")
+		(property "Sheetname" "CONTROLLER"
+			(at 41.91 36.1184 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "CONTROLLER [2].kicad_sch"
+			(at 41.91 81.8646 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "ESP32_Motor_Controller"
+				(path "/4b1fdcf1-a19d-4728-9a21-4ed82cf33882"
+					(page "2")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 120.015 93.345)
+		(size 64.77 40.64)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "3d31c666-6276-4ad1-82c0-9a0a7c226d45")
+		(property "Sheetname" "POWER MOSFET"
+			(at 120.015 92.6334 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "POWER_MOSFET.kicad_sch"
+			(at 120.015 134.5696 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "ESP32_Motor_Controller"
+				(path "/4b1fdcf1-a19d-4728-9a21-4ed82cf33882"
+					(page "4")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 41.91 93.98)
+		(size 62.865 40.64)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "7311843d-6497-4c6d-a677-061de705640a")
+		(property "Sheetname" "POWER"
+			(at 41.91 93.2684 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "POWER [1].kicad_sch"
+			(at 41.91 135.2046 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "ESP32_Motor_Controller"
+				(path "/4b1fdcf1-a19d-4728-9a21-4ed82cf33882"
+					(page "1")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 202.565 36.195)
+		(size 53.975 45.085)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "ab4343ec-5ddb-4298-b075-086f8306213a")
+		(property "Sheetname" "SENSORS"
+			(at 202.565 35.4834 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "SENSORS.kicad_sch"
+			(at 202.565 81.8646 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "ESP32_Motor_Controller"
+				(path "/4b1fdcf1-a19d-4728-9a21-4ed82cf33882"
+					(page "5")
+				)
+			)
+		)
+	)
+	(sheet
+		(at 120.015 36.195)
+		(size 63.5 44.45)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(stroke
+			(width 0.1524)
+			(type solid)
+		)
+		(fill
+			(color 0 0 0 0.0000)
+		)
+		(uuid "b48d869c-27f1-41d9-9235-2b29afe5c618")
+		(property "Sheetname" "GATE DRIVER"
+			(at 120.015 35.4834 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left bottom)
+			)
+		)
+		(property "Sheetfile" "GATE DRIVER [3].kicad_sch"
+			(at 120.015 81.2296 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify left top)
+			)
+		)
+		(instances
+			(project "ESP32_Motor_Controller"
+				(path "/4b1fdcf1-a19d-4728-9a21-4ed82cf33882"
+					(page "3")
+				)
+			)
+		)
+	)
+	(sheet_instances
+		(path "/"
+			(page "1")
+		)
+	)
+	(embedded_fonts no)
+)
