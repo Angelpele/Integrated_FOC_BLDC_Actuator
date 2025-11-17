@@ -4213,7 +4213,7 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Mechanical:MountingHole_Pad_MP"
+		(symbol "Mechanical:MountingHole_Pad"
 			(pin_numbers
 				(hide yes)
 			)
@@ -4232,7 +4232,7 @@
 					)
 				)
 			)
-			(property "Value" "MountingHole_Pad_MP"
+			(property "Value" "MountingHole_Pad"
 				(at 0 4.445 0)
 				(effects
 					(font
@@ -4258,7 +4258,7 @@
 					(hide yes)
 				)
 			)
-			(property "Description" "Mounting Hole with connection as pad named MP"
+			(property "Description" "Mounting Hole with connection"
 				(at 0 0 0)
 				(effects
 					(font
@@ -4285,7 +4285,7 @@
 					(hide yes)
 				)
 			)
-			(symbol "MountingHole_Pad_MP_0_1"
+			(symbol "MountingHole_Pad_0_1"
 				(circle
 					(center 0 1.27)
 					(radius 1.27)
@@ -4298,18 +4298,18 @@
 					)
 				)
 			)
-			(symbol "MountingHole_Pad_MP_1_1"
+			(symbol "MountingHole_Pad_1_1"
 				(pin input line
 					(at 0 -2.54 90)
 					(length 2.54)
-					(name "MP"
+					(name "1"
 						(effects
 							(font
 								(size 1.27 1.27)
 							)
 						)
 					)
-					(number "MP"
+					(number "1"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -5650,6 +5650,16 @@
 	)
 	(wire
 		(pts
+			(xy 119.38 138.43) (xy 119.38 151.13)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "74678678-89ed-44f7-ac53-6fe9ef6e9e93")
+	)
+	(wire
+		(pts
 			(xy 50.8 68.58) (xy 50.8 71.12)
 		)
 		(stroke
@@ -6077,16 +6087,6 @@
 			(type default)
 		)
 		(uuid "ca7ff981-c364-48c5-b961-29a4cf50a414")
-	)
-	(wire
-		(pts
-			(xy 119.38 138.43) (xy 119.38 151.13)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "cc42abc9-7934-4e03-adf8-eaa4d45a5cda")
 	)
 	(wire
 		(pts
@@ -7437,7 +7437,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mechanical:MountingHole_Pad_MP")
+		(lib_id "Mechanical:MountingHole_Pad")
 		(at 119.38 153.67 180)
 		(unit 1)
 		(exclude_from_sim no)
@@ -7464,7 +7464,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "MountingHole:MountingHole_2.5mm"
+		(property "Footprint" "MountingHole:MountingHole_2.5mm_Pad_Via"
 			(at 119.38 153.67 0)
 			(effects
 				(font
@@ -7482,7 +7482,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Mounting Hole with connection as pad named MP"
+		(property "Description" "Mounting Hole with connection"
 			(at 119.38 153.67 0)
 			(effects
 				(font
@@ -7491,7 +7491,7 @@
 				(hide yes)
 			)
 		)
-		(pin "MP"
+		(pin "1"
 			(uuid "3024412f-73a5-4038-8034-31bbac0929ee")
 		)
 		(instances
@@ -9914,7 +9914,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mechanical:MountingHole_Pad_MP")
+		(lib_id "Mechanical:MountingHole_Pad")
 		(at 149.86 153.67 180)
 		(unit 1)
 		(exclude_from_sim no)
@@ -9941,7 +9941,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "MountingHole:MountingHole_2.5mm"
+		(property "Footprint" "MountingHole:MountingHole_2.5mm_Pad_Via"
 			(at 149.86 153.67 0)
 			(effects
 				(font
@@ -9959,7 +9959,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Mounting Hole with connection as pad named MP"
+		(property "Description" "Mounting Hole with connection"
 			(at 149.86 153.67 0)
 			(effects
 				(font
@@ -9968,7 +9968,7 @@
 				(hide yes)
 			)
 		)
-		(pin "MP"
+		(pin "1"
 			(uuid "2452ebf7-50b9-4f6a-a9dc-a0259754a0c2")
 		)
 		(instances
@@ -10382,7 +10382,7 @@
 		)
 	)
 	(symbol
-		(lib_id "Mechanical:MountingHole_Pad_MP")
+		(lib_id "Mechanical:MountingHole_Pad")
 		(at 134.62 153.67 180)
 		(unit 1)
 		(exclude_from_sim no)
@@ -10409,7 +10409,7 @@
 				(justify right)
 			)
 		)
-		(property "Footprint" "MountingHole:MountingHole_2.5mm"
+		(property "Footprint" "MountingHole:MountingHole_2.5mm_Pad_Via"
 			(at 134.62 153.67 0)
 			(effects
 				(font
@@ -10427,7 +10427,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" "Mounting Hole with connection as pad named MP"
+		(property "Description" "Mounting Hole with connection"
 			(at 134.62 153.67 0)
 			(effects
 				(font
@@ -10436,7 +10436,7 @@
 				(hide yes)
 			)
 		)
-		(pin "MP"
+		(pin "1"
 			(uuid "cbee8bc6-3cf0-495d-a02a-c0369c7b1868")
 		)
 		(instances

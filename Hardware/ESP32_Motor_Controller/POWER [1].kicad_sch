@@ -6327,7 +6327,7 @@
 		)
 		(uuid "237598ab-ad4a-47a1-bb94-c134a5946255")
 	)
-	(label "GND POWER"
+	(label "+16 POWER"
 		(at 232.41 137.16 180)
 		(effects
 			(font
@@ -6377,7 +6377,7 @@
 		)
 		(uuid "740b7a13-5581-4b3b-a16f-b6527827f2cc")
 	)
-	(label "+16 POWER"
+	(label "GND POWER"
 		(at 232.41 139.7 180)
 		(effects
 			(font
