@@ -1,0 +1,10 @@
+B - Refresh solid areas
+X - route track
+W - make track thicker
+SHIFT + W - make track thinner
+U - Select all track 
+E - Change properties
+V - Change layer
+A - Load footprints
+SHIFT + 7 (/) to change track corner orientation
+R - Rotate component

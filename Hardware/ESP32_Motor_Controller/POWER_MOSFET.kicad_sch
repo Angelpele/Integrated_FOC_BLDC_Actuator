@@ -6481,7 +6481,7 @@
 		)
 	)
 	(global_label "SN_2"
-		(shape passive)
+		(shape output)
 		(at 127 106.68 180)
 		(fields_autoplaced yes)
 		(effects
@@ -6492,7 +6492,7 @@
 		)
 		(uuid "192324fc-c06a-4822-9c32-522d54511c57")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 120.409 106.68 0)
+			(at 119.2977 106.68 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6659,7 +6659,7 @@
 		)
 	)
 	(global_label "SN_1"
-		(shape passive)
+		(shape output)
 		(at 34.29 105.41 180)
 		(fields_autoplaced yes)
 		(effects
@@ -6670,7 +6670,7 @@
 		)
 		(uuid "726a445c-e399-4d87-8c40-8bded635085f")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 27.699 105.41 0)
+			(at 26.5877 105.41 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6794,7 +6794,7 @@
 		)
 	)
 	(global_label "SP_2"
-		(shape passive)
+		(shape output)
 		(at 127 121.92 180)
 		(fields_autoplaced yes)
 		(effects
@@ -6805,7 +6805,7 @@
 		)
 		(uuid "d933f69d-d3ba-4f44-9045-c91fa8f3e1f6")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 120.4695 121.92 0)
+			(at 119.3582 121.92 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -6882,7 +6882,7 @@
 		)
 	)
 	(global_label "SP_1"
-		(shape passive)
+		(shape output)
 		(at 34.29 120.65 180)
 		(fields_autoplaced yes)
 		(effects
@@ -6893,7 +6893,7 @@
 		)
 		(uuid "ed160244-444a-47c8-8a99-530dbc7d4826")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 27.7595 120.65 0)
+			(at 26.6482 120.65 0)
 			(effects
 				(font
 					(size 1.27 1.27)

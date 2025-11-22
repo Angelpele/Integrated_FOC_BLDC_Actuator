@@ -1,4 +1,4 @@
-25231839763683385
+25233609705545525
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -59232,7 +59232,7 @@ IRFH7440TRPBF
 
 0
 9
-9
+5
 Inductor_SMD
 L_6.3x6.3_H3
 Choke, SMD, 6.3x6.3mm 3mm height
@@ -100568,6 +100568,13 @@ igbt diode module
 0
 25
 25
+USB_C_Receptacle_Palconn_UTC16-G
+USB_C_Receptacle_Palconn_UTC16-G
+http://www.palpilot.com/wp-content/uploads/2017/05/UTC027-GKN-OR-Rev-A.pdf
+USB C Type-C Receptacle USB2.0
+0
+20
+17
 Valve
 Valve_ECC-83-1
 Valve ECC-83-1 round pins
