@@ -2622,8 +2622,8 @@
 		(start 227.965 20.955)
 		(end 281.305 74.295)
 		(stroke
-			(width 0)
-			(type default)
+			(width 0.254)
+			(type solid)
 		)
 		(fill
 			(type none)
@@ -4088,9 +4088,9 @@
 			)
 		)
 	)
-	(global_label "BMI_SDO"
+	(global_label "BMI_SDA"
 		(shape input)
-		(at 106.68 45.72 0)
+		(at 106.68 43.18 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -4101,7 +4101,7 @@
 		)
 		(uuid "9b4e316f-01dc-4cb5-8d3b-c27cce542d55")
 		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 117.769 45.72 0)
+			(at 117.5271 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -4199,29 +4199,6 @@
 					(size 1.27 1.27)
 				)
 				(justify right)
-				(hide yes)
-			)
-		)
-	)
-	(global_label "BMI_SDI"
-		(shape input)
-		(at 106.68 40.64 0)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-				(thickness 0.1588)
-			)
-			(justify left)
-		)
-		(uuid "cfcc1060-487e-489f-bd65-d1b161e21f39")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 117.0433 40.64 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify left)
 				(hide yes)
 			)
 		)
@@ -5521,7 +5498,7 @@
 	)
 	(symbol
 		(lib_id "Connector:TestPoint")
-		(at 106.68 45.72 90)
+		(at 106.68 43.18 90)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -5529,15 +5506,15 @@
 		(dnp no)
 		(uuid "52152354-bdda-4fe9-bb66-40ee1257c646")
 		(property "Reference" "TP16"
-			(at 97.79 43.688 90)
+			(at 97.79 41.148 90)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
 			)
 		)
-		(property "Value" "BMI_SDO"
-			(at 98.044 45.974 90)
+		(property "Value" "BMI_SDA"
+			(at 98.044 43.434 90)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5545,7 +5522,7 @@
 			)
 		)
 		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 106.68 40.64 0)
+			(at 106.68 38.1 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5554,7 +5531,7 @@
 			)
 		)
 		(property "Datasheet" "~"
-			(at 106.68 40.64 0)
+			(at 106.68 38.1 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5563,7 +5540,7 @@
 			)
 		)
 		(property "Description" "test point"
-			(at 106.68 45.72 0)
+			(at 106.68 43.18 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -5778,70 +5755,6 @@
 			(project "ESP32_Motor_Controller"
 				(path "/4b1fdcf1-a19d-4728-9a21-4ed82cf33882/ab4343ec-5ddb-4298-b075-086f8306213a"
 					(reference "MP_3")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Connector:TestPoint")
-		(at 106.68 40.64 90)
-		(unit 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(dnp no)
-		(uuid "644a86cf-ab1c-4647-b8ac-de3a8835c450")
-		(property "Reference" "TP15"
-			(at 98.044 38.354 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "BMI_SDI"
-			(at 98.044 40.64 90)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "TestPoint:TestPoint_Pad_D1.0mm"
-			(at 106.68 35.56 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Datasheet" "~"
-			(at 106.68 35.56 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(property "Description" "test point"
-			(at 106.68 40.64 0)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(hide yes)
-			)
-		)
-		(pin "1"
-			(uuid "15fa0c57-faad-4760-8925-c66ed35741fb")
-		)
-		(instances
-			(project "ESP32_Motor_Controller"
-				(path "/4b1fdcf1-a19d-4728-9a21-4ed82cf33882/ab4343ec-5ddb-4298-b075-086f8306213a"
-					(reference "TP15")
 					(unit 1)
 				)
 			)
