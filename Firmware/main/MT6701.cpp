@@ -4,7 +4,7 @@
 //===================================================================================================//
 
 #include "MT6701.h"
-
+#include "esp_timer.h"
 
 
 void MT6701::init()
@@ -71,7 +71,7 @@ mag_data MT6701::get_data()
     mag_data package;
 
     data = SSI_read_raw();
-    package.angle = (float)SSI_get_ang(data)/16384 * 360;
+    package.angle = (float)SSI_get_ang(data)/COUNTS_PER_REV * 360;
     uint8_t mg = SSI_get_mag_status(data);
     package.push = (mg >> 2) & 0x01;             // Active HIGH, shift 2 bits to the right and mask
     package.status = (mg >> 3) & 0x01;           // If 1, loss of track
@@ -94,3 +94,70 @@ uint8_t MT6701::SSI_get_CRC (uint32_t raw)
     return (uint8_t)((raw >> 18) & ((1U << 6) - 1U));   // Cyclic Redundancy Check from bit 18:23 MSB first CRC[5:0], masked with 6 "0" bits
 }
 
+float MT6701::getAngleDegrees() const
+{
+    return lastCount * COUNTS_TO_DEG;
+}
+
+float MT6701::getAngleRadians() const
+{
+    return lastCount * COUNTS_TO_RAD;
+}
+
+int32_t MT6701::getFullTurns() const
+{
+    return accumulator / COUNTS_PER_REV;
+}
+
+float MT6701::getTurns() const
+{
+    return (float)accumulator / (float)COUNTS_PER_REV;
+}
+
+int32_t MT6701::getAccumulator() const
+{
+    return accumulator;
+}
+
+float MT6701::getRPM() const
+{
+    if (!rpmMutex) return rpm;
+
+    xSemaphoreTake(rpmMutex, portMAX_DELAY);
+    float r = rpm;
+    xSemaphoreGive(rpmMutex);
+    return r;
+}
+
+void MT6701::updateCount()
+{
+    mag_data raw = get_data();  
+    int newCount = (int)(raw.angle / COUNTS_TO_DEG);
+
+    int diff = newCount - lastCount;
+    if (diff >  COUNTS_PER_REV / 2) diff -= COUNTS_PER_REV;  
+    if (diff < -COUNTS_PER_REV / 2) diff += COUNTS_PER_REV;
+
+    uint32_t now = esp_timer_get_time() / 1000;  
+    uint32_t dt  = now - lastUpdateTime;
+
+    if (dt > 0)
+    {
+        float inst_rpm = (diff / (float)COUNTS_PER_REV) * (60000.0f / dt);
+
+        if (rpmMutex)
+        {
+            xSemaphoreTake(rpmMutex, portMAX_DELAY);
+            rpm = inst_rpm;
+            xSemaphoreGive(rpmMutex);    // Avoid changing the value of rpm while reading it
+        }
+        else
+        {
+            rpm = inst_rpm;
+        }
+    }
+
+    accumulator += diff;
+    lastCount = newCount;
+    lastUpdateTime = now;
+}

@@ -1,12 +1,14 @@
 // GENERAL GPIO //
+uint8_t MOTOR_ID = 0;
 
 #define USB_DP 20
 #define USB_DN 19
 
 #define BOOT 0
 
-#define CAN_RX 44
-#define CAN_TX 43
+#define CAN_RX ((gpio_num_t)44)
+#define CAN_TX ((gpio_num_t)43)
+#define BAUDRATE 115200
 
 #define PVDD_SENSE 17
 
