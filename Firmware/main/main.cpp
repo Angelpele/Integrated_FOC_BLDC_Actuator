@@ -1,9 +1,16 @@
-#include "esp32.h"
-#include "stdio.h"
-#include "driver/gpio.h"  //ESP32 GPIO
-#include "freertos/FreeRTOS.h" //Handle tasks, shcedule...
-#include "freertos/task.h"
+#include "esp32_S3.h"
+#include "DRV8302.h"
 
+DRV8302 drv;
+
+extern "C" void app_main(void)
+{
+        drv.init();
+        drv.setup();
+        while(1){
+            drv.loop();
+        }
+}
 
 /*main
 |

@@ -1,0 +1,38 @@
+ESD Connected in the wrong orientation? No
+
+Data cable for usb C? It is data cable
+
+USBC not soldered properly, pads lifting -> That was the error
+
+DRV not configured, Nfault and NOCW arent high so the buck isn't working.
+
+
+Test for continuity from D+ and D- in usb to the pins of the esp, check they are not connected inversely - No
+
+Check GPIO46 state, should be low
+
+En and Boot pints receive voltage?
+
+Check CC1 and CC2 resistance in the usb, from usb pad to gnd
+
+ESD SV05 shorted? Check continuity
+
+Measure 5V and 3V3 stability voltage
+
+Check short in caps for enable and boot.
+
+
+
+---- DRV Check ----
+
+En_BUCK connected to GND? if so bad, should be greater than 1.2V - NO GND
+
+Check PVDD2 has voltage, short to PVDD pin with wire 
+
+Check 200k resistance of  RT_CLK - ?
+
+Cap from SS_TR to GND connected properly - Yes
+
+
+
+

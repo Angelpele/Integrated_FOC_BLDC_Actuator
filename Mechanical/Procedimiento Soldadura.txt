@@ -1,0 +1,37 @@
+1- Todos los componentes de RPP -> RPP funciona
+2- Conectores XT y JST
+3- Componentes USB tipo C (menos conector)
+4- Soldar ESP32 y periféricos de la misma página
+5- Soldar alredadores ESP32 + Leds (resistencias grandes en el hive)
+6- Soldar DRV (más fácil soldar pads con pasta, pasar estañador y luego soldar el DRV sobre ello)
+7- Soldar alrededores DRV
+8- Soldar USB
+9- Con pistola de calor soldar mosfets traseros, evitar dejar pasta sin componente al soldar
+10- Soldar componentes pasivos traseros y TLV
+
+Pasta aplicada -> componente a la cama (no dejar componentes sin soldar que la pasta endurece)
+El cátodo de los diodos y leds es o la línea o la parte verde (se suelda hacia el lado rodeado por silkscreen)
+
+
+
+Missing list
+--560pF 0402
+--1uF 0402 / 0603
+22uF 0402 (does not exit) - 0603
+--1.6nF 0402 
+--15nF 0402
+--4.7uF 0402
+
+--10R 0603
+--100R 0603
+--120R 0603
+--56R 0603
+4k7 0402
+
+
+2.2uF 0603 -> caja plastico pequeña capacitors senior
+
+
+Pillar tmb 0402
+--2.2nF
+0.1uF

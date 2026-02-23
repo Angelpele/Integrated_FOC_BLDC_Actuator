@@ -2,6 +2,8 @@
 //                                          MT6701 Magnetometer                                      //
 //                                                Encoder                                            //
 //===================================================================================================//
+#ifndef MT6701_H
+#define MT6701_H
 
 #include "esp32_S3.h"
 #include "stdio.h"
@@ -55,4 +57,6 @@ private:
     SemaphoreHandle_t rpmMutex = nullptr;
     void updateCount();
 };
+
+#endif
 

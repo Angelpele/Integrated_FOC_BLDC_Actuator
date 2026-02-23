@@ -5969,6 +5969,71 @@
 		)
 	)
 	(symbol
+		(lib_id "power:VSS")
+		(at 143.51 66.04 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "1fa4825a-0b35-4a5e-9395-970e6fd0615f")
+		(property "Reference" "#PWR094"
+			(at 143.51 69.85 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "PVDD"
+			(at 147.32 64.516 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 143.51 66.04 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 143.51 66.04 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"VSS\""
+			(at 143.51 66.04 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "6dcf4653-e369-4cb3-8ca2-b68c84084cef")
+		)
+		(instances
+			(project "ESP32_Motor_Controller"
+				(path "/4b1fdcf1-a19d-4728-9a21-4ed82cf33882/b48d869c-27f1-41d9-9235-2b29afe5c618"
+					(reference "#PWR094")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Device:R")
 		(at 74.93 120.65 0)
 		(unit 1)
@@ -6706,7 +6771,7 @@
 		(dnp no)
 		(uuid "4d46af89-702f-473a-bdfa-d8234a40cc19")
 		(property "Reference" "C315"
-			(at 140.716 64.262 0)
+			(at 137.16 74.168 0)
 			(effects
 				(font
 					(size 1.27 1.27)

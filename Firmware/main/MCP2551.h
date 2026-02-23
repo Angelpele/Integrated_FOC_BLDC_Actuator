@@ -2,8 +2,10 @@
 //                                            MCP2551 CAN                                            //
 //                                            Transceiver                                            //
 //===================================================================================================//
+#ifndef MCP2551_H
+#define MCP2551_H
 
-#include "esp32_S3.h"
+#include "ESP32_S3.h"
 #include "stdio.h"
 #include "driver/gpio.h"  //ESP32 GPIO
 #include "esp_rom_sys.h"
@@ -17,18 +19,19 @@
 
 typedef struct {
     uint32_t timestamp_us;
-
 } CAN_pkg;
 
 
 class CAN {
-public:
-    void init();
-    float calibration();
-    int sendData(uint8_t ID, CAN_pkg);
+    public:
+        void init();
+        float calibration();
+        int sendData(uint8_t ID, CAN_pkg);
 
 
-private:
+    private:
+        void tx_task(void *arg);
+        void rx_task(void *arg);
+};
 
-
-}
+#endif

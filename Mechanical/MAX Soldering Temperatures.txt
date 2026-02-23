@@ -1,5 +1,9 @@
-BMI270 - 260ºC
-DRV8302 - 260ºC
+BMI270 - 260ºC - 500 F
+DRV8302 - 260ºC - 500 F
 MT6701 - ?
-MCP2551 - 180ºC
+MCP2551 - 180ºC - 356 F
 IRFH7440 - ?
+
+Safe temp below 200ºC - 392 F
+
+La cama caliente está en celsius
