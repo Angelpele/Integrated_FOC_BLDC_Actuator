@@ -4,6 +4,8 @@
 // GENERAL GPIO //
 #define MOTOR_ID 0;
 
+#define SERIAL_RATE 100   
+
 #define USB_DP 20
 #define USB_DN 19
 
@@ -13,12 +15,10 @@
 #define CAN_TX ((gpio_num_t)43)
 #define BAUDRATE 115200
 
-#define PVDD_SENSE 17
-
 // DRV8302 GPIO //
-#define A_SENSE ((gpio_num_t)1)
-#define B_SENSE ((gpio_num_t)2)
-#define C_SENSE ((gpio_num_t)3)
+#define A_SENSE ADC1_CHANNEL_0  // GPIO 1
+#define B_SENSE ADC1_CHANNEL_1  // GPIO 2
+#define C_SENSE ADC1_CHANNEL_2  // GPIO 3
 
 #define INL_A ((gpio_num_t)15)
 #define INH_A ((gpio_num_t)16)
@@ -34,8 +34,8 @@
 #define NOCTW ((gpio_num_t)38)
 
 #define GAIN ((gpio_num_t)37)
-#define SO1 ((gpio_num_t)8)
-#define SO2 ((gpio_num_t)9)
+#define SO1 ADC1_CHANNEL_7  // GPIO 8
+#define SO2 ADC1_CHANNEL_8  // GPIO 9
 
 #define EN_DRV ((gpio_num_t)14)
 
@@ -53,7 +53,26 @@
 #define MAG_CSN ((gpio_num_t)18)
 #define MAG_CLK ((gpio_num_t)21)
 
-#define NTC ((gpio_num_t)13)
+#define NTC ADC2_CHANNEL_2  // GPIO 13
+#define PVDD_SENSE ADC2_CHANNEL_6  // GPIO 17
+
+enum SystemState {
+    SYSTEM_INIT,
+    SYSTEM_CALIBRATION,
+    SYSTEM_RUNNING,
+};
+
+volatile uint32_t isr_counter = 0;
+
+TaskHandle_t focTaskHandle = NULL;
+TaskHandle_t magTaskHandle = NULL;
+TaskHandle_t drvTaskHandle = NULL;
+TaskHandle_t telemetryTaskHandle = NULL;
+
+#define FOC_DIVIDER        1
+#define MAG_DIVIDER    4
+#define DRV_DIVIDER        10
+#define TELEMETRY_DIVIDER  200
 
 #endif
 

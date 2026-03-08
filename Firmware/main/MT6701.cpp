@@ -26,6 +26,7 @@ float MT6701::calibration()
     gpio_set_level(MAG_CSN, 0);
     esp_rom_delay_us(1);
     
+    printf("Calibrating Magnetic Encoder...");
     for(int i=0; i<1000;i++)
     {
         data = SSI_read_raw();
@@ -38,19 +39,22 @@ float MT6701::calibration()
         esp_rom_delay_us(2000/(2*Delay_MAG));
     }
     
-    if(abs(error) > 500)
+    if(abs(error) > 300)
     {
+        printf("Magnetic Encoder Calibration error: %d\n", error);
         return error > 0 ? -1.0f : -2.0f;                   //-1 for Strong field error, -2 for weak field error
     }
 
     esp_rom_delay_us(Delay_MAG);
     gpio_set_level(MAG_CSN, 1);
-    return ((float)sum/16384000 * 360);
+    offset = ((float)sum/16384000 * 360);
+    return 0;
 }
 
 uint32_t MT6701::SSI_read_raw()
 {
     uint32_t raw = 0;
+    gpio_set_level(MAG_CSN, 0);
     
     for (int i = 0; i < 24; i++)
     {
@@ -61,22 +65,29 @@ uint32_t MT6701::SSI_read_raw()
         gpio_set_level(MAG_CLK, 0);
         esp_rom_delay_us(Delay_MAG);
     }
+    gpio_set_level(MAG_CSN, 1);
     return raw;
 }
 
-mag_data MT6701::get_data()
+mag_data MT6701::getdata()
 {
-    uint32_t sum = 0;
     uint32_t data = 0;
     mag_data package;
 
     data = SSI_read_raw();
-    package.angle = (float)SSI_get_ang(data)/COUNTS_PER_REV * 360;
+    package.angle = ((float)SSI_get_ang(data)/COUNTS_PER_REV * 360) - offset;
     uint8_t mg = SSI_get_mag_status(data);
     package.push = (mg >> 2) & 0x01;             // Active HIGH, shift 2 bits to the right and mask
     package.status = (mg >> 3) & 0x01;           // If 1, loss of track
     
     return package;
+}
+
+void MT6701::printdata(mag_data data)
+{
+    printf(" | Angle mag: %2.2fº", data.angle);
+    printf(" | Status mag: %d", data.status);
+    printf(" | Push mag: %d", data.push);
 }
 
 uint16_t MT6701::SSI_get_ang (uint32_t raw)
@@ -131,7 +142,7 @@ float MT6701::getRPM() const
 
 void MT6701::updateCount()
 {
-    mag_data raw = get_data();  
+    mag_data raw = getdata();  
     int newCount = (int)(raw.angle / COUNTS_TO_DEG);
 
     int diff = newCount - lastCount;
@@ -141,7 +152,7 @@ void MT6701::updateCount()
     uint32_t now = esp_timer_get_time() / 1000;  
     uint32_t dt  = now - lastUpdateTime;
 
-    if (dt > 0)
+    if (dt > 0) 
     {
         float inst_rpm = (diff / (float)COUNTS_PER_REV) * (60000.0f / dt);
 

@@ -27,7 +27,7 @@ void CAN::init()
         //Number defined for CAN pins, NO_CHANGE for pins not used (CTS and RTS pins)   
 }
 
-int CAN::sendData(uint8_t ID, const char* data)
+int CAN::sendData(uint8_t ID, CAN_pkg data)
 {
     const int len = strlen(data);
     const int txBytes = uart_write_bytes(UART_NUM_0, data, len);

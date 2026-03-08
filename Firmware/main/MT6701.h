@@ -27,15 +27,17 @@ public:
 
     void init();
     float calibration();
-    mag_data get_data();
+    mag_data getdata();
+    void printdata(mag_data);
 
+    uint32_t getraw(){ return SSI_read_raw();}
     float getAngleDegrees() const;
     float getAngleRadians() const;
     float getTurns() const;
     float getRPM() const;
 
-    int32_t   getFullTurns() const;
-    int32_t   getAccumulator() const;
+    int32_t getFullTurns() const;
+    int32_t getAccumulator() const;
     
     
 private:    
@@ -46,6 +48,7 @@ private:
 
     int lastCount = 0;
     int accumulator = 0;
+    int offset = 0;
 
     float rpm = 0.0f;
     uint32_t lastUpdateTime = 0;

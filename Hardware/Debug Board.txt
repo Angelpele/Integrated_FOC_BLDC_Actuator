@@ -35,4 +35,108 @@ Cap from SS_TR to GND connected properly - Yes
 
 
 
+---DRV ENABLE---
+
+Check continuity in caps cp1 and cp2.
+OC_ADJ = 0.14 V
+
+GVDD = 1 V
+
+SH_A/B/C ≈ 0 V
+
+PVDD1 = 16V ✅
+
+PVDD2 = 16V ✅
+
+EN_GATE = 3.2V ✅
+
+DVDD = 3.3V when enabled ✅
+
+AVDD exists (since DVDD works) ✅
+
+GVDD = ~1V ❌
+
+SH pins ≈ 0V ❌
+
+No visible short on GVDD (0.2 MΩ) ✅
+
+
+mirar si el cap de AVDD es de 1uF 0402 y el de GVDD es de 2.2uF 0402, existen?
+medir resistencia entre GH-SH y GL - GND 
+medir resitencia entre GVDD-GH y GVDD-GL
+
+------------------------------------------------------------------------------------------------------------------------------
+
+Dispositivo utilizado: DRV8302. El DRV original falló en algún momento previo (no se especificó si hubo shoot-through, sobrecalentamiento u olor a quemado). Antes de soldar el segundo DRV se desoldaron las resistencias de gate de los MOSFETs, los MOSFETs permanecieron soldados, se eliminó RPP y se eliminó USB VBUS. Se han soldado dos DRV distintos y ambos presentan exactamente el mismo comportamiento.
+
+Condiciones de Alimentación y Habilitación
+
+Voltaje de entrada (PVDD): 16V estables aplicados a PVDD1 (pin 29, potencia del driver) y a PVDD2 (pines 53/54, regulador Buck). Medido PVDD a GND = 16V estables. También se midió directamente en los pines del chip confirmando 16V sólidos.
+
+Señal de Enable (EN_GATE, pin 16): Recibe 3.3V correctamente cuando el ESP32 ejecuta gpio_set_level(EN_DRV, 1). El pin de gate medía aproximadamente 2.3V y subía a 3.3V cuando se activaba enable.
+
+nRESET: Confirmado en estado alto.
+
+DVDD (pin 23): 0.5V sin enable y 3.3V cuando enable está activo, confirmando que el regulador digital interno funciona correctamente.
+
+Referencia de tierra (GND): Se ha verificado que los pines de fase SH_A, SH_B y SH_C no están flotando. Tras correcciones, miden aproximadamente 0.13V cada uno con 16V aplicados y enable activo, descartando bloqueo por errata de 8.5V durante el arranque y confirmando fases válidas referenciadas a GND.
+
+Configuración de Hardware:
+
+BIAS (Pin 49): Conectado a tierra con condensador de 0.1µF.
+
+DTC (Pin 7): Resistencia de 10kΩ a tierra para control de tiempo muerto.
+
+OC_ADJ (Pin 11): Inicialmente configurado con 3.3kΩ (generando ~0.1V, por debajo del mínimo de 0.125V). Se cambió a 15kΩ (~0.43V) sin cambios en el comportamiento. Medición directa: ~0.15mV cuando enabled y ~43mV cuando disabled.
+
+Mediciones de Voltaje (Estado de Fallo)
+
+Tras activar el driver mediante el código y con 16V aplicados:
+
+AVDD (Pin 27): ≈0.9–0.95V (debería ser ~6.5V).
+
+GVDD (Pin 13): ≈0.9V (debería ser ~11.5V).
+
+DVDD (Pin 23): 3.3V correcto.
+
+nFAULT (Pin 6): Presenta 1.8V en estado normal y baja a 1.0V al activar Enable. El pin es de drenador abierto y tiene un LED conectado a tierra, lo que provoca que en estado normal no pueda subir a 3.3V (flota en 1.8V por fugas) y al detectar error el DRV intenta tirar a tierra pero se queda en 1.0V por la caída de tensión del LED.
+
+Con resistencias de gate desoldadas inicialmente se midió SH_A ≈5V, SH_B ≈1.5V y SH_C ≈36mV con 16V aplicados, indicando estados inválidos posiblemente por gates flotantes. Posteriormente se volvieron a soldar las 6 resistencias de gate y los SH pasaron a ≈0.13V cada uno con enable activo.
+
+Aun con SH válidos, AVDD y GVDD permanecen en ≈0.9V.
+
+Se realizó prueba crítica desoldando completamente el capacitor de AVDD dejando el pin flotante; con 16V aplicados y enable activo AVDD sigue ≈0.9V y GVDD ≈0.9V, descartando carga externa o capacitor defectuoso.
+
+Mediciones de Impedancia y Continuidad
+
+AVDD a GND: Medición inicial de 49kΩ sin energía. Posteriormente medición de 722Ω con corriente de prueba de 1mA.
+
+SH a PVDD: ~39kΩ en todas las fases.
+
+SH a GND: ~33kΩ en todas las fases.
+
+C308 (Bootstrap Fase C): Lectura inicial de 500Ω que desapareció al cargarse el componente.
+
+C401 (Decoupling PVDD): Resistencia constante de 500Ω, indicando fuga de corriente aproximada de 32mA en la línea de 16V.
+
+C403 (Shunt Fase A): Marcaba continuidad pero se determinó normal al estar en paralelo con R405 de 0.01Ω.
+
+Errores Críticos Identificados
+
+Conflicto eléctrico en nFAULT: Pin open-drain con LED a tierra provoca niveles intermedios (1.8V en reposo y 1.0V en fallo). No controla el arranque interno de AVDD pero altera lectura lógica externa.
+
+Daño interno sugerido (C401): Resistencia de 500Ω en línea PVDD sugiere fuga interna en el chip o condensador perforado, lo que puede impedir que GVDD y AVDD suban de 0.9V debido a consumo excesivo o protección por bajo voltaje (GVDD_UV).
+
+Conflicto JTAG en ESP32-S3: GPIO 39, 40, 41 y 42 (usados para DC_CAL, MPWM, MOC y NFAULT) son pines JTAG por defecto, lo que puede causar control independiente del código sobre señales críticas.
+
+Resumen del Estado Actual
+
+El DRV8302 está funcional a nivel lógico (DVDD=3.3V) pero su etapa analógica/potencia no arranca. AVDD y GVDD permanecen en ~0.9V incluso con capacitor de AVDD removido y SH en estado válido. Dos chips distintos presentan el mismo comportamiento. Se descartan cortos fuertes en MOSFETs, se verificó PVDD estable en 16V, enable y reset correctos. Los reguladores analógicos no arrancan, lo que sugiere bloqueo interno, latch-off o posible mala soldadura del PowerPAD (pin 57) que impida el retorno de corriente de los LDOs internos, o daño interno en el bloque analógico del dispositivo.
+
+
+AVDD y AGND estaban en corto, el capacitor que supuestamente va entre ellos, estaba tirado a GND pero después del corto en vez de antes.
+
+
+
+
 
