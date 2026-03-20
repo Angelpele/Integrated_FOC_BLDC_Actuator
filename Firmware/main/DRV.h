@@ -6,18 +6,7 @@
 
 
 #include "esp32_S3.h"
-#include "stdio.h"
-#include "driver/gpio.h"  //ESP32 GPIO
-#include "driver/adc.h"
-#include "esp_rom_sys.h"
-#include "esp_log.h"
-#include "driver/uart.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "math.h"
-#include "driver/ledc.h"
-#include "driver/mcpwm.h"
-#include "esp_task_wdt.h"
+
 
 enum DRV_Error {
     DRV_OK = 0,
@@ -58,9 +47,9 @@ class DRV {
         void set_override(bool state){
             fault_override = state;
             if (state)
-                printf("FAULT OVERRIDE ENABLED\n");
+                printf("DRV FAULT OVERRIDE ENABLED\n");
             else
-                printf("FAULT OVERRIDE DISABLED\n");
+                printf("DRV FAULT OVERRIDE DISABLED\n");
         }
 
         float getPVDD(int PVDD_raw){

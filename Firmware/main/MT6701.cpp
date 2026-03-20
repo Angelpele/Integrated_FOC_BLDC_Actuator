@@ -18,37 +18,57 @@ void MT6701::init()
     //Power up time Max 32 ms
 }
 
-float MT6701::calibration()
-{                                  // Return offset value
+MT6701_Status MT6701::calibration()
+{                                  // Return status code
     uint32_t sum = 0;
     uint32_t data = 0;
     int8_t error = 0;
     gpio_set_level(MAG_CSN, 0);
     esp_rom_delay_us(1);
-    
     printf("Calibrating Magnetic Encoder...");
     for(int i=0; i<1000;i++)
     {
         data = SSI_read_raw();
         sum += SSI_get_ang(data);
-        
         uint8_t mag = SSI_get_mag_status(data);
         if(mag & 0x1) error++;          // Too Strong field, bit 0
         if(mag & 0x2) error--;          // Too Weak field, bit 1
-        
         esp_rom_delay_us(2000/(2*Delay_MAG));
     }
-    
     if(abs(error) > 300)
     {
         printf("Magnetic Encoder Calibration error: %d\n", error);
-        return error > 0 ? -1.0f : -2.0f;                   //-1 for Strong field error, -2 for weak field error
+        if (error > 0) return MT6701_ERR_STRONG_FIELD;
+        else return MT6701_ERR_WEAK_FIELD;
     }
-
     esp_rom_delay_us(Delay_MAG);
     gpio_set_level(MAG_CSN, 1);
     offset = ((float)sum/16384000 * 360);
-    return 0;
+    return MT6701_OK;
+}
+
+MT6701_Status MT6701::fault_detection()
+{
+    if (fault_override){
+        return MT6701_OK;   // Ignore ALL faults
+    }
+
+    uint32_t data = SSI_read_raw();
+    uint8_t mag = SSI_get_mag_status(data);
+    // Bit 0: Too strong, Bit 1: Too weak, Bit 3: Loss of track
+    if (mag & 0x1) {
+        printf("MT6701 FAULT: Magnetic field too strong\n");
+        return MT6701_ERR_STRONG_FIELD;
+    }
+    if (mag & 0x2) {
+        printf("MT6701 FAULT: Magnetic field too weak\n");
+        return MT6701_ERR_WEAK_FIELD;
+    }
+    if ((mag >> 3) & 0x1) {
+        printf("MT6701 WARNING: Loss of track\n");
+        return MT6701_ERR_UNKNOWN;
+    }
+    return MT6701_OK;
 }
 
 uint32_t MT6701::SSI_read_raw()
@@ -85,14 +105,14 @@ mag_data MT6701::getdata()
 
 void MT6701::printdata(mag_data data)
 {
-    printf(" | Angle mag: %2.2fº", data.angle);
-    printf(" | Status mag: %d", data.status);
+    printf(" | Ang mag: %2.2fº", data.angle);
+    printf(" | Stat mag: %d", data.status);
     printf(" | Push mag: %d", data.push);
 }
 
 uint16_t MT6701::SSI_get_ang (uint32_t raw)
 {
-    return (uint16_t)(raw & ((1U << 14) - 1U));   // Angle bits from bit 0:13 MSB first D[13:0], masked with 14 "0" bits
+    return (uint16_t)((raw >> 10) & 0x3FFF);   // Angle bits from bit 0:13 MSB first D[13:0], masked with 14 "0" bits
 }
 
 uint8_t MT6701::SSI_get_mag_status (uint32_t raw)

@@ -6,12 +6,7 @@
 #define MCP2551_H
 
 #include "ESP32_S3.h"
-#include "stdio.h"
-#include "driver/gpio.h"  //ESP32 GPIO
-#include "esp_rom_sys.h"
-#include "driver/uart.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+
 
 #define CAN_Speed 1  //Mbps
 #define RX_BUF_SIZE 1024  //Size of the buffer in bytes

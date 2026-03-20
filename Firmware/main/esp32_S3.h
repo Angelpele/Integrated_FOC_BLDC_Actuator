@@ -1,6 +1,27 @@
 #ifndef ESP32_S3_H
 #define ESP32_S3_H
 
+#include "stdio.h"
+#include "driver/gpio.h"  //ESP32 GPIO
+#include "driver/adc.h"
+//#include "driver/mcpwm_prelude.h"
+//#include "driver/gptimer.h"
+#include "driver/mcpwm.h"
+#include "driver/timer.h"
+#include "driver/ledc.h"
+#include "driver/uart.h"
+#include "esp_rom_sys.h"
+#include "esp_log.h"
+#include "esp_task_wdt.h"
+#include "soc/timer_group_struct.h"
+#include "soc/timer_group_reg.h"
+#include "driver/uart.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/semphr.h"
+#include "math.h"
+
+
 // GENERAL GPIO //
 #define MOTOR_ID 0;
 
@@ -36,6 +57,8 @@
 #define GAIN ((gpio_num_t)37)
 #define SO1 ADC1_CHANNEL_7  // GPIO 8
 #define SO2 ADC1_CHANNEL_8  // GPIO 9
+#define SO1_GPIO ((gpio_num_t)8)
+#define SO2_GPIO ((gpio_num_t)9)
 
 #define EN_DRV ((gpio_num_t)14)
 
@@ -62,17 +85,14 @@ enum SystemState {
     SYSTEM_RUNNING,
 };
 
-volatile uint32_t isr_counter = 0;
+//Timer 1MHz
+#define TIMER_DIVIDER 80          // 80 MHz / 80 = 1 MHz timer
+#define TIMER_INTERVAL_US 50      // 50 µs → 20 kHz
 
-TaskHandle_t focTaskHandle = NULL;
-TaskHandle_t magTaskHandle = NULL;
-TaskHandle_t drvTaskHandle = NULL;
-TaskHandle_t telemetryTaskHandle = NULL;
-
-#define FOC_DIVIDER        1
-#define MAG_DIVIDER    4
-#define DRV_DIVIDER        10
-#define TELEMETRY_DIVIDER  200
+#define FOC_DIVIDER        1    //1Mhz
+#define MAG_DIVIDER        4    //250khz
+#define DRV_DIVIDER        40   //25khz  (max 200 khz)
+#define TELEMETRY_DIVIDER  200  //5khz
 
 #endif
 

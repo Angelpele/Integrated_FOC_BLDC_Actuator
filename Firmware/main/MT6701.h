@@ -6,12 +6,7 @@
 #define MT6701_H
 
 #include "esp32_S3.h"
-#include "stdio.h"
-#include "driver/gpio.h"  //ESP32 GPIO
-#include "esp_rom_sys.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/semphr.h"
+
 
 #define Delay_MAG 6   //Delay between CLK edges (30 ns min for MT6701)
 
@@ -22,13 +17,21 @@ typedef struct {
     uint8_t push;
 } mag_data;
 
+enum MT6701_Status {
+    MT6701_OK = 0,
+    MT6701_ERR_STRONG_FIELD = -1,
+    MT6701_ERR_WEAK_FIELD = -2,
+    MT6701_ERR_UNKNOWN = -99
+};
+
 class MT6701 {
 public:
-
     void init();
-    float calibration();
+    MT6701_Status calibration();
     mag_data getdata();
     void printdata(mag_data);
+
+    MT6701_Status fault_detection();
 
     uint32_t getraw(){ return SSI_read_raw();}
     float getAngleDegrees() const;
@@ -38,6 +41,14 @@ public:
 
     int32_t getFullTurns() const;
     int32_t getAccumulator() const;
+
+    void set_override(bool state){
+        fault_override = state;
+        if (state)
+            printf("MT6701 FAULT OVERRIDE ENABLED\n");
+        else
+            printf("MT6701 FAULT OVERRIDE DISABLED\n");
+    }
     
     
 private:    
@@ -52,6 +63,7 @@ private:
 
     float rpm = 0.0f;
     uint32_t lastUpdateTime = 0;
+    bool fault_override = false;
 
     static constexpr int   COUNTS_PER_REV = 16384;
     static constexpr float COUNTS_TO_DEG  = 360.0f / COUNTS_PER_REV;

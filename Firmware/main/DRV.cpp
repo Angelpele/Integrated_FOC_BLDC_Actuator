@@ -17,12 +17,6 @@ int DRV::init()
     gpio_reset_pin(MOC);
     gpio_reset_pin(NFAULT);
 
-    gpio_set_direction(INL_A, GPIO_MODE_OUTPUT);
-    gpio_set_direction(INH_A, GPIO_MODE_OUTPUT);
-    gpio_set_direction(INL_B, GPIO_MODE_OUTPUT);
-    gpio_set_direction(INH_B, GPIO_MODE_OUTPUT);
-    gpio_set_direction(INL_C, GPIO_MODE_OUTPUT);
-    gpio_set_direction(INH_C, GPIO_MODE_OUTPUT);
     gpio_set_direction(DC_CAL, GPIO_MODE_OUTPUT);
     gpio_set_direction(MPWM, GPIO_MODE_OUTPUT);
     gpio_set_direction(MOC, GPIO_MODE_OUTPUT);
@@ -33,6 +27,15 @@ int DRV::init()
     gpio_set_level(INH_B, 0);
     gpio_set_level(INL_C, 0);
     gpio_set_level(INH_C, 0);
+
+    gpio_set_direction(SO1_GPIO, GPIO_MODE_INPUT);
+    gpio_set_direction(SO2_GPIO, GPIO_MODE_INPUT);
+
+    gpio_pullup_dis(SO1_GPIO);
+    gpio_pulldown_dis(SO1_GPIO);
+
+    gpio_pullup_dis(SO2_GPIO);
+    gpio_pulldown_dis(SO2_GPIO);
 
     adc1_config_width(ADC_WIDTH_BIT_12);  // No need to configure ADC2
     adc1_config_channel_atten(A_SENSE, ADC_ATTEN_DB_12);
@@ -51,7 +54,7 @@ int DRV::init()
     gpio_set_direction(EN_DRV, GPIO_MODE_OUTPUT); // Set to output to drive the pin
     gpio_set_level(EN_DRV, 0);        // keep driver disabled first
     gpio_set_level(DC_CAL, 0);        // normal operation
-    gpio_set_level(GAIN, 0);          // choose gain explicitly
+    gpio_set_level(GAIN, 1);          // choose gain explicitly
     gpio_set_level(MPWM, 0);          // 6 PWM indep inputs
     gpio_set_level(MOC, 1);           // 0: cycle by cycle current control
     vTaskDelay(pdMS_TO_TICKS(5000));    // allow rails to settle
@@ -136,9 +139,9 @@ void DRV::printdata(DRV_data package)
     printf(" | I1: %.2f", package.current1);
     printf(" | I2: %.2f", package.current2);
     printf(" | I3: %.2f", -(package.current1 + package.current2));
-    printf(" | A_SENSE: %d", package.A_raw);
-    printf(" | B_SENSE: %d", package.B_raw);
-    printf(" | C_SENSE: %d", package.C_raw);
+    printf(" | A: %d", package.A_raw);
+    printf(" | B: %d", package.B_raw);
+    printf(" | C: %d", package.C_raw);
     printf(" | NFAULT: %d", package.NFAULT_raw);
     printf(" | NOCTW: %d", package.NOCTW_raw);
     printf(" | NTC: %.2f", package.temperature);
@@ -239,13 +242,8 @@ void DRV::update_spwm() {
     float duty_b = (sinf(phase_accumulator - 2.0*M_PI/3.0) * modulation_index + 1.0) * 50.0;
     float duty_c = (sinf(phase_accumulator - 4.0*M_PI/3.0) * modulation_index + 1.0) * 50.0;
 
-
-    duty_a = 80;
-    duty_b = 50;
-    duty_c = 20;
-
     // Apply duties to High-Side (A) and Low-Side (B) operators, takes the duty as percentage (0-100)
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty_a);
+    /*mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty_a);
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100 - duty_a);
 
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, duty_b);
@@ -253,6 +251,15 @@ void DRV::update_spwm() {
 
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, duty_c);
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 100 - duty_c);
+*/
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, 20);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 0);
+
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, 0);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_B, 0);
+
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, 0);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 0);
 }
 
 void DRV::test_working_trans() {
