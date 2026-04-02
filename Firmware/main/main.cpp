@@ -13,9 +13,11 @@ TaskHandle_t telemetryTaskHandle = NULL;
 // MAIN VARIABLE DECLARATION //
 DRV drv;
 MT6701 mag;
-
 DRV_data drv_pkg;
 mag_data mag_pkg;
+
+SemaphoreHandle_t drv_mutex = NULL;
+SemaphoreHandle_t mag_mutex = NULL;
 
 // MAIN FUNCTION DECLARATION //
 int initialize();
@@ -34,7 +36,15 @@ bool debug_mode_enabled = false;
 
 extern "C" void app_main(void)
 {
+    drv_mutex = xSemaphoreCreateMutex();
+    mag_mutex = xSemaphoreCreateMutex();
+    configASSERT(drv_mutex);
+    configASSERT(mag_mutex);
+
     if (!debug_mode_enabled) {
+
+        esp_task_wdt_add(NULL); // Subscribe main to the task watchdog
+
         while (true)
         {
             switch (system_state)
@@ -57,36 +67,28 @@ extern "C" void app_main(void)
                 case SYSTEM_CALIBRATION:
                 {
                     if (calibration() == 0) {
-                        printf("\nRunning");
-                        for (int i = 0; i < 10; i++) {
-                            printf(".");
-                            vTaskDelay(pdMS_TO_TICKS(200));
-                        }
-                        printf("\n");
+                        printf("\nRunning....\n");
+                        vTaskDelay(pdMS_TO_TICKS(1000));
+                        create_tasks_once();
                         start_control_timer();
                         system_state = SYSTEM_RUNNING;
+
                     } else {
-                        printf("\n\nCalibration failed, retrying...");
-                        for (int i = 0; i < 10; i++) {
-                            printf(".");
-                            vTaskDelay(pdMS_TO_TICKS(500));
-                        }
-                        printf("\n");
-                        vTaskDelay(pdMS_TO_TICKS(200));
+                        printf("\n\nCalibration failed, retrying....\n");
+                        vTaskDelay(pdMS_TO_TICKS(2000));
                     }
                     break;
                 }
                 
                 // ---------------- MAIN LOOP ----------------
                 case SYSTEM_RUNNING:
-                {
-                    create_tasks_once();
-                    //drv.test_sinu();
+                {;
                     if (drv.fault_detection() == DRV_LATCHED) {
                         printf("Critical fault detected. Driver disabled. Waiting for reset....\n");
+                        fflush(stdout);
                         system_state = SYSTEM_INIT;
                         gpio_set_level(EN_DRV, 0);
-                          
+                        
                     }
                     if (mag.fault_detection() != MT6701_OK) {
                         printf("Magnetometer fault detected. Check sensor and magnetic field....\n");
@@ -114,23 +116,17 @@ extern "C" void app_main(void)
             //mag.printdata(mag_pkg);
             //printf("\n");
             drv.update_spwm();
-            
-            // Note: If update_spwm() generates the motor sine wave, 
-            // a 10ms delay here will still ruin the motor commutation.
-            // Consider using esp_rom_delay_us(1) or esp_task_wdt_reset() instead.
-            vTaskDelay(pdMS_TO_TICKS(10)); 
         }
     }
 }
 
 int initialize() {
-    drv.setup_mcpwm();
     mag.init();
-    
     return drv.init();
 }
 
 int calibration() {
+    drv.setup_mcpwm();
     return drv.calibration() + mag.calibration();
 }
 
@@ -166,67 +162,91 @@ void start_control_timer()
 void create_tasks_once() {
     static bool tasks_created = false;
     if (!tasks_created) {
-        xTaskCreatePinnedToCore(focLoop, "focLoop", 4096, NULL, 10, &focTaskHandle, 1);
+        xTaskCreatePinnedToCore(focLoop, "focLoop", 4096, NULL, 10, &focTaskHandle, 1);  //1 and 0 are the core IDs
         xTaskCreatePinnedToCore(magLoop, "magLoop", 4096, NULL, 9, &magTaskHandle, 1);
-        xTaskCreatePinnedToCore(drvLoop, "drvLoop", 4096, NULL, 8, &drvTaskHandle, 1);
+        xTaskCreatePinnedToCore(drvLoop, "drvLoop", 4096, NULL, 8, &drvTaskHandle, 0);
         xTaskCreatePinnedToCore(telemetryLoop, "telemetryLoop", 4096, NULL, 2, &telemetryTaskHandle, 0);
         tasks_created = true;
     }
 }
 
 void focLoop(void* arg){
+    esp_task_wdt_add(NULL);  // Subscribe to watchdog
     while(true){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        //drv.update_spwm();      // PWM update
+        drv.update_spwm();      // PWM update
+        esp_task_wdt_reset();
     }
 }
 
-void magLoop(void* arg){
-    while(true){
+void magLoop(void* arg) {
+    esp_task_wdt_add(NULL);
+    while (true) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        mag_pkg = mag.getdata();
+        mag_data temp = mag.getdata();
+        xSemaphoreTake(mag_mutex, portMAX_DELAY);
+            mag_pkg = temp;
+        xSemaphoreGive(mag_mutex);
+        esp_task_wdt_reset();
     }
 }
 
-void drvLoop(void* arg){
-    while(true){
+void drvLoop(void* arg) {
+    esp_task_wdt_add(NULL);
+    while (true) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        drv_pkg = drv.getdata();
+        DRV_data temp = drv.getdata();
+        xSemaphoreTake(drv_mutex, portMAX_DELAY);
+            drv_pkg = temp;
+        xSemaphoreGive(drv_mutex);
+        esp_task_wdt_reset();
     }
 }
 
-void telemetryLoop(void* arg){
-    while(true){
+void telemetryLoop(void* arg) {
+    esp_task_wdt_add(NULL);
+    while (true) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        drv.printdata(drv_pkg);
-        mag.printdata(mag_pkg);
+        DRV_data temp_drv;
+        mag_data temp_mag;
+        xSemaphoreTake(drv_mutex, portMAX_DELAY);
+            temp_drv = drv_pkg;
+        xSemaphoreGive(drv_mutex);
+        xSemaphoreTake(mag_mutex, portMAX_DELAY);
+            temp_mag = mag_pkg;
+        xSemaphoreGive(mag_mutex);
+ 
+        drv.printdata(temp_drv);
+        mag.printdata(temp_mag);
         printf("\n");
+ 
+        esp_task_wdt_reset();
     }
 }
 
 void IRAM_ATTR controlISR(void* arg)
 {
-    // Clear the timer interrupt using the proper API
     timer_group_clr_intr_status_in_isr(TIMER_GROUP_0, TIMER_0);
-
-    // After an alarm, the hardware disables it. You must re-enable it for the next tick.
     timer_group_enable_alarm_in_isr(TIMER_GROUP_0, TIMER_0);
 
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    isr_counter += FOC_DIVIDER;
-    vTaskNotifyGiveFromISR(focTaskHandle, &xHigherPriorityTaskWoken);
+    static uint32_t tick = 0;
+    tick++;
 
-    if(isr_counter % MAG_DIVIDER == 0)
-        vTaskNotifyGiveFromISR(magTaskHandle, &xHigherPriorityTaskWoken);
+    BaseType_t woken = pdFALSE;
 
-    if(isr_counter % DRV_DIVIDER == 0)
-        vTaskNotifyGiveFromISR(drvTaskHandle, &xHigherPriorityTaskWoken);
+    vTaskNotifyGiveFromISR(focTaskHandle, &woken);
 
-    if(isr_counter % TELEMETRY_DIVIDER == 0)
-        vTaskNotifyGiveFromISR(telemetryTaskHandle, &xHigherPriorityTaskWoken);
+    // Resto: subdivisiones exactas
+    if (tick % MAG_DIVIDER == 0)
+        vTaskNotifyGiveFromISR(magTaskHandle, &woken);
 
-    if(xHigherPriorityTaskWoken)
-        portYIELD_FROM_ISR();
+    if (tick % DRV_DIVIDER == 0)
+        vTaskNotifyGiveFromISR(drvTaskHandle, &woken);
+
+    if (tick % TELEMETRY_DIVIDER == 0)
+        vTaskNotifyGiveFromISR(telemetryTaskHandle, &woken);
+
+    if (woken) portYIELD_FROM_ISR();
 }
 
 

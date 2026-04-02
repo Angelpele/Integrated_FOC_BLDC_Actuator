@@ -2846,6 +2846,16 @@
 		)
 		(uuid "49f65fc5-c6b0-4efc-b001-54c87a4f920a")
 	)
+	(text "Recommended 0.8V (92% - 109%)"
+		(exclude_from_sim no)
+		(at 43.18 141.224 0)
+		(effects
+			(font
+				(size 0.635 0.635)
+			)
+		)
+		(uuid "6f36a53c-f562-4208-a4c3-ca26165106bd")
+	)
 	(text "90A x 2.4mΩ = 0.22V\n"
 		(exclude_from_sim no)
 		(at 50.8 101.6 0)
@@ -5863,7 +5873,7 @@
 				(hide yes)
 			)
 		)
-		(property "Value" "VCC"
+		(property "Value" "+3.3V"
 			(at 62.23 123.952 0)
 			(effects
 				(font
@@ -7157,7 +7167,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "6.8k"
+		(property "Value" "4.7k"
 			(at 34.544 108.204 0)
 			(effects
 				(font
@@ -7435,7 +7445,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "100k"
+		(property "Value" "55k"
 			(at 34.544 100.584 0)
 			(effects
 				(font
@@ -7704,7 +7714,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10k"
+		(property "Value" "3.3k"
 			(at 54.864 145.034 0)
 			(effects
 				(font
@@ -10151,7 +10161,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "52.3k"
+		(property "Value" "10k"
 			(at 54.864 134.874 0)
 			(effects
 				(font

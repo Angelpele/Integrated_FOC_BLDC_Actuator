@@ -23,7 +23,7 @@
 
 
 // GENERAL GPIO //
-#define MOTOR_ID 0;
+#define MOTOR_ID 0
 
 #define SERIAL_RATE 100   
 
@@ -89,10 +89,10 @@ enum SystemState {
 #define TIMER_DIVIDER 80          // 80 MHz / 80 = 1 MHz timer
 #define TIMER_INTERVAL_US 50      // 50 µs → 20 kHz
 
-#define FOC_DIVIDER        1    //1Mhz
-#define MAG_DIVIDER        4    //250khz
-#define DRV_DIVIDER        40   //25khz  (max 200 khz)
-#define TELEMETRY_DIVIDER  200  //5khz
+#define FOC_DIVIDER        1    //20khz (max 200 khz)
+#define MAG_DIVIDER        4    //5khz
+#define DRV_DIVIDER        40   //500hz  
+#define TELEMETRY_DIVIDER  200  //100hz
 
 #endif
 

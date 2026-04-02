@@ -28,15 +28,6 @@ int DRV::init()
     gpio_set_level(INL_C, 0);
     gpio_set_level(INH_C, 0);
 
-    gpio_set_direction(SO1_GPIO, GPIO_MODE_INPUT);
-    gpio_set_direction(SO2_GPIO, GPIO_MODE_INPUT);
-
-    gpio_pullup_dis(SO1_GPIO);
-    gpio_pulldown_dis(SO1_GPIO);
-
-    gpio_pullup_dis(SO2_GPIO);
-    gpio_pulldown_dis(SO2_GPIO);
-
     adc1_config_width(ADC_WIDTH_BIT_12);  // No need to configure ADC2
     adc1_config_channel_atten(A_SENSE, ADC_ATTEN_DB_12);
     adc1_config_channel_atten(B_SENSE, ADC_ATTEN_DB_12);
@@ -57,10 +48,15 @@ int DRV::init()
     gpio_set_level(GAIN, 1);          // choose gain explicitly
     gpio_set_level(MPWM, 0);          // 6 PWM indep inputs
     gpio_set_level(MOC, 1);           // 0: cycle by cycle current control
-    vTaskDelay(pdMS_TO_TICKS(5000));    // allow rails to settle
-
-    gpio_set_level(EN_DRV, 1); 
-    vTaskDelay(pdMS_TO_TICKS(1000)); 
+    for (int i = 0; i < 50; i++) {      // 50 × 100ms = 5000ms
+        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_task_wdt_reset();
+    }
+    gpio_set_level(EN_DRV, 1);
+    for (int i = 0; i < 10; i++) {      // 10 × 100ms = 1000ms
+        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_task_wdt_reset();
+    }
     NFAULT_raw = gpio_get_level(NFAULT);
 
     if (NFAULT_raw == 0) {
@@ -126,7 +122,7 @@ DRV_data DRV::getdata()
     package.PVDD = getPVDD(PVDD_raw);
 
 
-    if (esp_log_timestamp() - last_ntc_read > 100) {
+    if (esp_log_timestamp() - last_ntc_read > 500) {
         package.temperature = ntc.getTemperature(NTC_raw); 
         last_ntc_read = esp_log_timestamp();
     }
@@ -224,13 +220,23 @@ void DRV::setup_mcpwm() {
     mcpwm_init(GPIO_PWM_UNIT, MCPWM_TIMER_2, &pwm_config);
 
     // Configure Dead-time
-    // DRV8302 has hardware dead-time, but we add 1us software dead-time for safety
-    mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_BYPASS_FED, 40, 40); //40 clk cycles
-    mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_BYPASS_FED, 40, 40);
-    mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_BYPASS_FED, 40, 40);
+    // 1us software dead-time for safety
+    mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 40, 40);
+    mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 40, 40);
+    mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 40, 40);
 }
 
 void DRV::update_spwm() {
+    if (!ramp_done) {
+        float df = ramp_rate * dt;
+        electrical_freq += df;
+
+        if (electrical_freq >= target_electrical_freq) {
+            electrical_freq = target_electrical_freq;
+            ramp_done = true;   // lock speed
+        }
+    }
+
     phase_accumulator += 2.0 * M_PI * electrical_freq * dt;
     
     // Keep the accumulator within 0 to 2π
@@ -243,7 +249,7 @@ void DRV::update_spwm() {
     float duty_c = (sinf(phase_accumulator - 4.0*M_PI/3.0) * modulation_index + 1.0) * 50.0;
 
     // Apply duties to High-Side (A) and Low-Side (B) operators, takes the duty as percentage (0-100)
-    /*mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty_a);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty_a);
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100 - duty_a);
 
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, duty_b);
@@ -251,15 +257,6 @@ void DRV::update_spwm() {
 
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, duty_c);
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 100 - duty_c);
-*/
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, 20);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 0);
-
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, 0);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_B, 0);
-
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, 0);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 0);
 }
 
 void DRV::test_working_trans() {
@@ -286,38 +283,6 @@ void DRV::test_working_trans() {
         gpio_set_level((gpio_num_t)steps[i].high_pin, 0);
         gpio_set_level((gpio_num_t)steps[i].low_pin, 0);
         
-        vTaskDelay(pdMS_TO_TICKS(.1));
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
-/*
-#define PWM_PERIOD 100     // software PWM resolution
-#define DELAY_US .001        // PWM speed
-
-float theta = 0;
-float step = 0.1; 
-
-void DRV::test_sinu(){
-    float duty_a = (sin(theta) + 1.0) * 50.0;
-    float duty_b = (sin(theta - 2*M_PI/3) + 1.0) * 50.0;
-    float duty_c = (sin(theta - 4*M_PI/3) + 1.0) * 50.0;
-
-    for(int i = 0; i < PWM_PERIOD; i++)
-    {
-        gpio_set_level(INH_A, i < duty_a);
-        gpio_set_level(INH_B, i < duty_b);
-        gpio_set_level(INH_C, i < duty_c);
-
-        gpio_set_level(INL_A, !(i < duty_a));
-        gpio_set_level(INL_B, !(i < duty_b));
-        gpio_set_level(INL_C, !(i < duty_c));
-
-        vTaskDelay(pdMS_TO_TICKS(DELAY_US));
-    }
-
-    theta += step;
-
-    if(theta > 2*M_PI)
-        theta -= 2*M_PI;
-}
-
-*/

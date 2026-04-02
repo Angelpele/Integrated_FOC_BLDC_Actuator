@@ -56,15 +56,15 @@ MT6701_Status MT6701::fault_detection()
     uint32_t data = SSI_read_raw();
     uint8_t mag = SSI_get_mag_status(data);
     // Bit 0: Too strong, Bit 1: Too weak, Bit 3: Loss of track
-    if (mag & 0x1) {
+    if (mag & 0x8) {
         printf("MT6701 FAULT: Magnetic field too strong\n");
         return MT6701_ERR_STRONG_FIELD;
     }
-    if (mag & 0x2) {
+    if (mag & 0x4) {
         printf("MT6701 FAULT: Magnetic field too weak\n");
         return MT6701_ERR_WEAK_FIELD;
     }
-    if ((mag >> 3) & 0x1) {
+    if (mag & 0x2) {
         printf("MT6701 WARNING: Loss of track\n");
         return MT6701_ERR_UNKNOWN;
     }
@@ -97,8 +97,8 @@ mag_data MT6701::getdata()
     data = SSI_read_raw();
     package.angle = ((float)SSI_get_ang(data)/COUNTS_PER_REV * 360) - offset;
     uint8_t mg = SSI_get_mag_status(data);
-    package.push = (mg >> 2) & 0x01;             // Active HIGH, shift 2 bits to the right and mask
-    package.status = (mg >> 3) & 0x01;           // If 1, loss of track
+    package.push = (mg >> 0) & 0x01;             // Active HIGH, shift 2 bits to the right and mask
+    package.status = (mg >> 1) & 0x01;           // If 1, loss of track
     
     return package;
 }
@@ -107,7 +107,7 @@ void MT6701::printdata(mag_data data)
 {
     printf(" | Ang mag: %2.2fº", data.angle);
     printf(" | Stat mag: %d", data.status);
-    printf(" | Push mag: %d", data.push);
+    printf(" | CRC: %d", data.push);
 }
 
 uint16_t MT6701::SSI_get_ang (uint32_t raw)
@@ -117,12 +117,12 @@ uint16_t MT6701::SSI_get_ang (uint32_t raw)
 
 uint8_t MT6701::SSI_get_mag_status (uint32_t raw)
 {
-    return (uint8_t)((raw >> 14) & ((1U << 4) - 1U));   // Mag Status bits from bit 14:17 MSB first Mg[3:0], masked with 4 "0" bits
+    return (uint8_t)((raw >> 6) & 0x0F);   // Mag Status bits from bit 14:17 MSB first Mg[3:0], masked with 4 "0" bits
 }
 
 uint8_t MT6701::SSI_get_CRC (uint32_t raw)
 {
-    return (uint8_t)((raw >> 18) & ((1U << 6) - 1U));   // Cyclic Redundancy Check from bit 18:23 MSB first CRC[5:0], masked with 6 "0" bits
+    return (uint8_t)(raw & 0x3F);   // Cyclic Redundancy Check from bit 18:23 MSB first CRC[5:0], masked with 6 "0" bits
 }
 
 float MT6701::getAngleDegrees() const
