@@ -39,7 +39,7 @@ class DRV {
 
         void pwm_init();
         void setup_mcpwm();
-        void update_spwm();
+        void update_spwm(float angle = 0);
         void test_working_trans();
         void test_sinu();
 
@@ -92,20 +92,34 @@ class DRV {
         // External sensors data
         int NTC_raw = 0;
         uint32_t last_ntc_read = 0;
+        float last_temperature = 0.0f;
         
         // Fault handling
         uint8_t latch_counter = 0;
         bool fault_override = false;
+        uint8_t nfault_glitch_count = 0; 
+
+        // Alignment and offset
+        bool aligned = false;
+        bool offset_calibrated = false;
+        float offset = 0.0;
+        float align_time = 0.0;
+        float ALIGN_DURATION = 0.5;   // 500 ms
 
         // Waveform generation
         uint32_t PWM_freq = 20000; // 20 kHz carrier frequency
         float phase_accumulator = 0;
-        float modulation_index = 1.0; // Amplitude (0.0 to 1.0) if higher -> overmodulation
+        float modulation_index = 0.8; // Amplitude (0.0 to 1.0) if higher -> overmodulation
         float electrical_freq = 2; // Motor Frequency (Hz), speed of the rotating field, higher than 0.5 to avoid deadzone
-        float target_electrical_freq = 100; // Target frequency for smooth transitions
-        float ramp_rate = 100; // How fast to change the frequency (Hz per second)
+        float target_electrical_freq = 60; // Target frequency for smooth transitions
+        float elec_offset = 0.0f; 
+
+        // Ramping control
         bool ramp_done = false; 
-        float dt = 0.0001; // Elapsed time (assuming 100us)
+        float ramp_rate = 100.0f; // How fast to change frequency (Hz/s)
+        float ramp_duration = 0.2f;
+        float dt = 0.000050f; // Elapsed time (assuming 50us)
+
 
     };
 

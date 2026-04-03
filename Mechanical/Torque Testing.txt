@@ -1,0 +1,4 @@
+250 mm Mod index 0.8, Electrical freq 50, 247g
+
+280mm Mod index 0.8 Electrical freq 60, 240g
+

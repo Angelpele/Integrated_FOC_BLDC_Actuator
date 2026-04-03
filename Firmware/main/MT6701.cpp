@@ -43,7 +43,7 @@ MT6701_Status MT6701::calibration()
     }
     esp_rom_delay_us(Delay_MAG);
     gpio_set_level(MAG_CSN, 1);
-    offset = ((float)sum/16384000 * 360);
+    offset = ((float)sum / 1000.0f) / COUNTS_PER_REV * 360.0f;
     return MT6701_OK;
 }
 
@@ -79,13 +79,13 @@ uint32_t MT6701::SSI_read_raw()
     for (int i = 0; i < 24; i++)
     {
         gpio_set_level(MAG_CLK, 1);             //MAG_DO reads the value on the rising edge of CLK
-        esp_rom_delay_us(Delay_MAG);
+        __asm__ __volatile__("nop\nnop\nnop\nnop\nnop\nnop\nnop\nnop");  //Required delay 30 ns
         raw <<= 1;                              // Shift MSB received to the left 1 bit
         raw |= gpio_get_level(MAG_DO);          // Set value of MAG_DO in LSB
         gpio_set_level(MAG_CLK, 0);
-        esp_rom_delay_us(Delay_MAG);
+        __asm__ __volatile__("nop\nnop\nnop\nnop\nnop\nnop\nnop\nnop");
     }
-    gpio_set_level(MAG_CSN, 1);
+    gpio_set_level(MAG_CSN, 1); 
     return raw;
 }
 
@@ -95,19 +95,16 @@ mag_data MT6701::getdata()
     mag_data package;
 
     data = SSI_read_raw();
-    package.angle = ((float)SSI_get_ang(data)/COUNTS_PER_REV * 360) - offset;
+    float angle = ((float)SSI_get_ang(data) / COUNTS_PER_REV * 360.0f) - offset;
+    angle = fmodf(angle, 360.0f);   // Wrap angle to [0, 360)
+    if (angle < 0) angle += 360.0f;
+    package.angle = angle;
+
     uint8_t mg = SSI_get_mag_status(data);
     package.push = (mg >> 0) & 0x01;             // Active HIGH, shift 2 bits to the right and mask
     package.status = (mg >> 1) & 0x01;           // If 1, loss of track
     
     return package;
-}
-
-void MT6701::printdata(mag_data data)
-{
-    printf(" | Ang mag: %2.2fº", data.angle);
-    printf(" | Stat mag: %d", data.status);
-    printf(" | CRC: %d", data.push);
 }
 
 uint16_t MT6701::SSI_get_ang (uint32_t raw)

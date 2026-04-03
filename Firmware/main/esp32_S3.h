@@ -92,7 +92,7 @@ enum SystemState {
 #define FOC_DIVIDER        1    //20khz (max 200 khz)
 #define MAG_DIVIDER        4    //5khz
 #define DRV_DIVIDER        40   //500hz  
-#define TELEMETRY_DIVIDER  200  //100hz
+#define TELEMETRY_DIVIDER  1000  // 20hz
 
 #endif
 

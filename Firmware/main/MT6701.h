@@ -59,7 +59,7 @@ private:
 
     int lastCount = 0;
     int accumulator = 0;
-    int offset = 0;
+    float offset = 0;
 
     float rpm = 0.0f;
     uint32_t lastUpdateTime = 0;

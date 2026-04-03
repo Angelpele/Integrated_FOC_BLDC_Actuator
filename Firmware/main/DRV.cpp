@@ -47,7 +47,7 @@ int DRV::init()
     gpio_set_level(DC_CAL, 0);        // normal operation
     gpio_set_level(GAIN, 1);          // choose gain explicitly
     gpio_set_level(MPWM, 0);          // 6 PWM indep inputs
-    gpio_set_level(MOC, 1);           // 0: cycle by cycle current control
+    gpio_set_level(MOC, 0);           // 0: cycle by cycle current control
     for (int i = 0; i < 50; i++) {      // 50 × 100ms = 5000ms
         vTaskDelay(pdMS_TO_TICKS(100));
         esp_task_wdt_reset();
@@ -110,9 +110,10 @@ DRV_data DRV::getdata()
     package.A_raw = adc1_get_raw(A_SENSE);
     package.B_raw = adc1_get_raw(B_SENSE);
     package.C_raw = adc1_get_raw(C_SENSE);
-    SO1_raw = adc1_get_raw(SO1);
-    SO2_raw = adc1_get_raw(SO2);
-    
+    //SO1_raw = adc1_get_raw(SO1);
+    //SO2_raw = adc1_get_raw(SO2);
+    SO1_raw = 0;
+    SO2_raw = 0;
     package.current1 = (float)(SO1_offset - SO1_raw) * voltage_step / (current_gain * R_shunt);
     package.current2 = (float)(SO2_offset - SO2_raw) * voltage_step / (current_gain * R_shunt);
     
@@ -123,70 +124,49 @@ DRV_data DRV::getdata()
 
 
     if (esp_log_timestamp() - last_ntc_read > 500) {
-        package.temperature = ntc.getTemperature(NTC_raw); 
+        last_temperature = ntc.getTemperature(NTC_raw); 
         last_ntc_read = esp_log_timestamp();
     }
+    package.temperature = last_temperature;
     return package;
-}
-
-void DRV::printdata(DRV_data package)
-{
-    printf("PVDD: %.2f V", package.PVDD);
-    printf(" | I1: %.2f", package.current1);
-    printf(" | I2: %.2f", package.current2);
-    printf(" | I3: %.2f", -(package.current1 + package.current2));
-    printf(" | A: %d", package.A_raw);
-    printf(" | B: %d", package.B_raw);
-    printf(" | C: %d", package.C_raw);
-    printf(" | NFAULT: %d", package.NFAULT_raw);
-    printf(" | NOCTW: %d", package.NOCTW_raw);
-    printf(" | NTC: %.2f", package.temperature);
 }
 
 int DRV::fault_detection()
 {
-    if (fault_override){
-        return DRV_OK;   // Ignore ALL faults
-    }
+    if (fault_override) return DRV_OK;
 
     int error_num = DRV_OK;
-    
 
-    // -------- Overvoltage --------
     if (getPVDD(PVDD_raw) >= overvoltage) {
-        gpio_set_level(EN_DRV, 0);   // Disable driver
+        gpio_set_level(EN_DRV, 0);
         printf("PVDD VOLTAGE OVER LIMIT!\n");
         error_num = DRV_OVERVOLTAGE;
     }
-
-    // -------- Hard Fault --------
     else if (NFAULT_raw == 0 && NOCTW_raw == 0) {
         printf("LATCHED FAULT detected!\n");
         latch_counter++;
         error_num = DRV_LATCHED;
     }
-
-    // -------- Fault only --------
     else if (NFAULT_raw == 0) {
-        printf("FAULT detected in DRV8302!\n");
-        latch_counter++;
+        nfault_glitch_count++;
+        if (nfault_glitch_count >= 4) {
+            printf("FAULT detected in DRV8302!\n");
+            latch_counter++;
+            nfault_glitch_count = 0;
+        }
         error_num = DRV_FAULT;
     }
-
-    // -------- Warning only --------
     else if (NOCTW_raw == 0) {
         printf("Overtemperature / Overcurrent Warning!\n");
         latch_counter++;
         error_num = DRV_WARNING;
     }
-
-    // -------- No error --------
     else {
+        nfault_glitch_count = 0;
         if (latch_counter > 0)
-            latch_counter--;   // Slowly decay latch
+            latch_counter--;
     }
 
-    // -------- Threshold check --------
     if (latch_counter >= 100) {
         printf("Fault threshold reached -> Driver must be reset\n");
         return DRV_LATCHED;
@@ -226,37 +206,95 @@ void DRV::setup_mcpwm() {
     mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 40, 40);
 }
 
-void DRV::update_spwm() {
-    if (!ramp_done) {
-        float df = ramp_rate * dt;
-        electrical_freq += df;
+void DRV::update_spwm(float angle)
+{
+    // =========================
+    // 1. ALIGNMENT (OPEN-LOOP) + OFFSET CALIBRATION
+    // =========================
+    if (!aligned) {
+        const float ALIGN_DUTY = 40.0f;
 
-        if (electrical_freq >= target_electrical_freq) {
-            electrical_freq = target_electrical_freq;
-            ramp_done = true;   // lock speed
+        // Soft-start ramp
+        float duty = (align_time < ramp_duration) ? (align_time / ramp_duration) * ALIGN_DUTY : ALIGN_DUTY;
+
+        // Force rotor to electrical zero: A high, B low, C floating
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100.0f - duty);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, 0);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_B, 100);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, 0);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 100);
+
+        align_time += dt;
+
+        if (align_time >= ALIGN_DURATION) {
+            float theta_mag = angle * (M_PI / 180.0f);
+            elec_offset = -theta_mag * (float)MOTOR_POLE_PAIRS;
+            
+            while (elec_offset >  M_PI) elec_offset -= 2.0f * M_PI; // Normalise to (-π, π]
+            while (elec_offset < -M_PI) elec_offset += 2.0f * M_PI;
+            phase_accumulator = 0.0f;   // we are at electrical zero by definition
+
+            offset_calibrated = true;
+            aligned = true;
+            printf("Alignment done. Angle: %.2f deg | elec_offset: %.4f rad\n", angle, elec_offset);
         }
+        esp_task_wdt_reset();
+        return;
     }
 
-    phase_accumulator += 2.0 * M_PI * electrical_freq * dt;
-    
-    // Keep the accumulator within 0 to 2π
-    if (phase_accumulator > 2.0 * M_PI) phase_accumulator -= 2.0 * M_PI;
+    // =========================
+    // 2. SENSOR ELECTRICAL ANGLE
+    // =========================
+    float theta_mag = angle * (M_PI / 180.0f);
+    float theta_elec_raw = theta_mag * (float)MOTOR_POLE_PAIRS + elec_offset;
 
-    // Calculate Duty Cycles shifted by 120 degrees (2π/3)
-    // Formula: (Sin(Angle) * Amplitude + Offset) * ScalingFactor
-    float duty_a = (sinf(phase_accumulator) * modulation_index + 1.0) * 50.0;
-    float duty_b = (sinf(phase_accumulator - 2.0*M_PI/3.0) * modulation_index + 1.0) * 50.0;
-    float duty_c = (sinf(phase_accumulator - 4.0*M_PI/3.0) * modulation_index + 1.0) * 50.0;
+    // Normalise to [0, 2π)
+    theta_elec_raw = fmodf(theta_elec_raw, 2.0f * M_PI);
+    if (theta_elec_raw < 0.0f) theta_elec_raw += 2.0f * M_PI;
 
-    // Apply duties to High-Side (A) and Low-Side (B) operators, takes the duty as percentage (0-100)
+    // =========================
+    // 3. FREQUENCY RAMP
+    // =========================
+    if (!ramp_done) {
+        electrical_freq += ramp_rate * dt;
+        if (electrical_freq >= target_electrical_freq) {
+            electrical_freq = target_electrical_freq;
+            ramp_done = true;
+        }
+        phase_accumulator += 2.0f * M_PI * electrical_freq * dt;
+        if (phase_accumulator >= 2.0f * M_PI) phase_accumulator -= 2.0f * M_PI;
+        if (phase_accumulator < 0.0f)         phase_accumulator += 2.0f * M_PI;
+
+        float blend = electrical_freq / target_electrical_freq;
+        float theta_elec  = (1.0f - blend) * phase_accumulator + blend * theta_elec_raw;
+
+        float duty_a = (sinf(theta_elec) * modulation_index + 1.0f) * 50.0f;
+        float duty_b = (sinf(theta_elec - 2.0f * M_PI / 3.0f) * modulation_index + 1.0f) * 50.0f;
+        float duty_c = (sinf(theta_elec - 4.0f * M_PI / 3.0f) * modulation_index + 1.0f) * 50.0f;
+
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty_a);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100.0f - duty_a);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, duty_b);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_B, 100.0f - duty_b);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, duty_c);
+        mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 100.0f - duty_c);
+        return;
+    }
+
+    // =========================
+    // 4. CLOSED-LOOP (sensor only)
+    // =========================
+    float duty_a = (sinf(theta_elec_raw) * modulation_index + 1.0f) * 50.0f;
+    float duty_b = (sinf(theta_elec_raw - 2.0f * M_PI / 3.0f) * modulation_index + 1.0f) * 50.0f;
+    float duty_c = (sinf(theta_elec_raw - 4.0f * M_PI / 3.0f) * modulation_index + 1.0f) * 50.0f;
+
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty_a);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100 - duty_a);
-
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100.0f - duty_a);
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, duty_b);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_B, 100 - duty_b);
-
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_B, 100.0f - duty_b);
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, duty_c);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 100 - duty_c);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 100.0f - duty_c);
 }
 
 void DRV::test_working_trans() {
