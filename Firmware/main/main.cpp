@@ -31,7 +31,8 @@ void drvLoop(void* arg);
 void telemetryLoop(void* arg);
 
 SystemState system_state = SYSTEM_INIT;
-bool debug_mode_enabled = false;
+DRV_MotionState motion = MOTION_ALIGNING;
+bool debug_mode_enabled = true;
 
 
 extern "C" void app_main(void)
@@ -41,85 +42,61 @@ extern "C" void app_main(void)
     configASSERT(drv_mutex);
     configASSERT(mag_mutex);
 
-    if (!debug_mode_enabled) {
+    esp_task_wdt_add(NULL); // Subscribe main to the task watchdog
 
-        esp_task_wdt_add(NULL); // Subscribe main to the task watchdog
-
-        while (true)
+    while (true)
+    {
+        switch (system_state)
         {
-            switch (system_state)
-            {
-                // ---------------- INIT ----------------
-                case SYSTEM_INIT:
-                {       
-                    
-                    gpio_set_pull_mode(CAN_RX, GPIO_PULLUP_ONLY); // GPIO44
-                    gpio_set_pull_mode(CAN_TX, GPIO_PULLUP_ONLY); // GPIO43
-
-                    if (initialize() == 0) {
-                        system_state = SYSTEM_CALIBRATION;
-                        drv.set_override(true);
-                        mag.set_override(true);
-                    } else {
-                        printf("Initialization failed, retrying...\n");
-                        vTaskDelay(pdMS_TO_TICKS(200));
-                    }
-                    break;
-                }
+            // ---------------- INIT ----------------
+            case SYSTEM_INIT:
+            {       
                 
-                // ---------------- CALIBRATION ----------------
-                case SYSTEM_CALIBRATION:
-                {
-                    if (calibration() == 0) {
-                        printf("\nRunning....\n");
-                        vTaskDelay(pdMS_TO_TICKS(1000));
-                        create_tasks_once();
-                        start_control_timer();
-                        system_state = SYSTEM_RUNNING;
+                gpio_set_pull_mode(CAN_RX, GPIO_PULLUP_ONLY); // GPIO44
+                gpio_set_pull_mode(CAN_TX, GPIO_PULLUP_ONLY); // GPIO43
 
-                    } else {
-                        printf("\n\nCalibration failed, retrying....\n");
-                        vTaskDelay(pdMS_TO_TICKS(2000));
-                    }
-                    break;
+                if (initialize() == 0) {
+                    system_state = SYSTEM_CALIBRATION;
+                    drv.set_override(true);
+                    mag.set_override(true);
+                } else {
+                    printf("Initialization failed, retrying...\n");
+                    vTaskDelay(pdMS_TO_TICKS(200));
                 }
-                
-                // ---------------- MAIN LOOP ----------------
-                case SYSTEM_RUNNING:
-                {;
-                    esp_task_wdt_reset();
-                    if (drv.fault_detection() == DRV_LATCHED) {
-                        printf("Critical fault detected. Driver disabled. Waiting for reset....\n");
-                        fflush(stdout);
-                        system_state = SYSTEM_INIT;
-                        gpio_set_level(EN_DRV, 0);
-                        
-                    }/*
-                    if (mag.fault_detection() != MT6701_OK) {
-                        printf("Magnetometer fault detected. Check sensor and magnetic field....\n");
-                    }*/
-                    //Software can feed a watchdog timer by writing any value to TIMG_WDTFEED_REG for MDWTs and RTC_CNTL_RTC_WDT_FEED for RWDT
-                    vTaskDelay(pdMS_TO_TICKS(10));
-                    break;
-                }
+                break;
             }
-        }
-    } else {
-        drv.init();          // 3. Init DRV (now that PWM exists)
-        drv.setup_mcpwm();   // 1. Setup PWM hardware first
-        mag.init();          // 2. Init MAG
-        
-        vTaskDelay(pdMS_TO_TICKS(500)); // Small delay to let hardware settle
-        
-        drv.set_override(true);
-        drv.calibration();
-        // ---------------------
-        
-        while(true){
-            //mag_pkg = mag.getdata();
-            //mag.printdata(mag_pkg);
-            //printf("\n");
-            drv.update_spwm(mag_pkg.angle);
+            
+            // ---------------- CALIBRATION ----------------
+            case SYSTEM_CALIBRATION:
+            {
+                if (calibration() == 0) {
+                    printf("\nRunning....\n");
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    create_tasks_once();
+                    start_control_timer();
+                    system_state = SYSTEM_RUNNING;
+
+                } else {
+                    printf("\n\nCalibration failed, retrying....\n");
+                    vTaskDelay(pdMS_TO_TICKS(2000));
+                }
+                break;
+            }
+            
+            // ---------------- MAIN LOOP ----------------
+            case SYSTEM_RUNNING:
+            {;
+                esp_task_wdt_reset();
+                if (drv.fault_detection() == DRV_LATCHED) {
+                    printf("Critical fault detected. Driver disabled. Waiting for reset....\n");
+                    fflush(stdout);
+                    system_state = SYSTEM_INIT;
+                    gpio_set_level(EN_DRV, 0);
+                    
+                }
+                vTaskDelay(pdMS_TO_TICKS(10));
+                break;
+            }
         }
     }
 }
@@ -169,7 +146,7 @@ void create_tasks_once() {
         xTaskCreatePinnedToCore(focLoop, "focLoop", 4096, NULL, 12, &focTaskHandle, 1);  //1 and 0 are the core IDs
         xTaskCreatePinnedToCore(magLoop, "magLoop", 4096, NULL, 11, &magTaskHandle, 0);
         xTaskCreatePinnedToCore(drvLoop, "drvLoop", 4096, NULL, 10, &drvTaskHandle, 0);
-        xTaskCreatePinnedToCore(telemetryLoop, "telemetryLoop", 4096, NULL, 4, &telemetryTaskHandle, 0);
+        xTaskCreatePinnedToCore(telemetryLoop, "telemetryLoop", 4096, NULL, 7, &telemetryTaskHandle, 0);
         tasks_created = true;
     }
 }
@@ -178,11 +155,38 @@ void focLoop(void* arg){
     esp_task_wdt_add(NULL);  // Subscribe to watchdog
     while(true){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        float temp_angle;
+        float angle;
         xSemaphoreTake(mag_mutex, portMAX_DELAY);
-        temp_angle = mag_pkg.angle;
+        angle = mag_pkg.angle;
         xSemaphoreGive(mag_mutex);
-        drv.update_spwm(temp_angle);      // PWM update
+
+        switch (motion) {
+            case MOTION_ALIGNING:
+                if (drv.align(angle).done)
+                    motion = MOTION_RAMPING;
+                break;
+
+            case MOTION_RAMPING:
+                if (drv.ramp(angle, 2.0f, 10.0f, 1.5f))   //Initial freq and target freq
+                    motion = MOTION_SPINNING;
+                break;
+
+            case MOTION_SPINNING:
+                if (drv.spin(angle, 10.0f, 3.0f)) // Spinning freq
+                    
+                break;
+
+            case MOTION_RAMPING_DOWN:
+                if (drv.ramp(angle, 10.0f, 0.5f, 1.5f))   //Target freq and final freq
+                    motion = MOTION_IDLE;
+                break;
+
+            case MOTION_IDLE:
+                drv.brake();
+                break;
+
+            default: break;
+        }
         esp_task_wdt_reset();
     }
 }
@@ -212,31 +216,33 @@ void drvLoop(void* arg) {
 }
 
 void telemetryLoop(void* arg) {
-    esp_task_wdt_add(NULL);
-    static char buf[192];
- 
-    while (true) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        DRV_data td;
-        mag_data tm;
- 
-        if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
-            td = drv_pkg;
-            xSemaphoreGive(drv_mutex);
-        } if (xSemaphoreTake(mag_mutex, portMAX_DELAY) == pdTRUE) {
-            tm = mag_pkg;
-            xSemaphoreGive(mag_mutex);
+    if (debug_mode_enabled) {
+        esp_task_wdt_add(NULL);
+        static char buf[192];
+    
+        while (true) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            DRV_data td;
+            mag_data tm;
+    
+            if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
+                td = drv_pkg;
+                xSemaphoreGive(drv_mutex);
+            } if (xSemaphoreTake(mag_mutex, portMAX_DELAY) == pdTRUE) {
+                tm = mag_pkg;
+                xSemaphoreGive(mag_mutex);
+            }
+            snprintf(buf, sizeof(buf),
+                "PVDD:%.2fV | I1:%.2f I2:%.2f I3:%.2f | A:%d B:%d C:%d | NFault:%d OC:%d | NTC:%.1f | Ang:%.2fº State:%d\n",
+                td.PVDD,
+                td.current1, td.current2, -(td.current1 + td.current2),
+                td.A_raw, td.B_raw, td.C_raw,
+                td.NFAULT_raw, td.NOCTW_raw, td.temperature,
+                tm.angle, tm.status);
+    
+            printf("%s", buf);
+            esp_task_wdt_reset();
         }
-        snprintf(buf, sizeof(buf),
-            "PVDD:%.2fV | I1:%.2f I2:%.2f I3:%.2f | A:%d B:%d C:%d | NFault:%d OC:%d | NTC:%.1f | Ang:%.2fº State:%d\n",
-            td.PVDD,
-            td.current1, td.current2, -(td.current1 + td.current2),
-            td.A_raw, td.B_raw, td.C_raw,
-            td.NFAULT_raw, td.NOCTW_raw, td.temperature,
-            tm.angle, tm.status);
- 
-        printf("%s", buf);
-        esp_task_wdt_reset();
     }
 }
 

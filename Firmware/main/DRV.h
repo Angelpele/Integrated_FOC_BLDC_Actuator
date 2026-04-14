@@ -16,6 +16,19 @@ enum DRV_Error {
     DRV_LATCHED = 4
 };
 
+enum DRV_MotionState {
+    MOTION_IDLE,
+    MOTION_ALIGNING,
+    MOTION_RAMPING,
+    MOTION_SPINNING,
+    MOTION_RAMPING_DOWN
+};
+
+struct AlignOffset {
+    bool  done;
+    float elec_offset;
+};
+
 typedef struct {
     float PVDD;
     float current1;
@@ -39,9 +52,13 @@ class DRV {
 
         void pwm_init();
         void setup_mcpwm();
-        void update_spwm(float angle = 0);
+        AlignOffset align(float angle);
+        bool ramp(float angle, float init_freq, float obj_freq, float duration_s);
+        bool spin(float angle, float freq, float duration_s);
+        bool svpwm(float angle, float freq);
+        void brake();
+        void idle();
         void test_working_trans();
-        void test_sinu();
 
         void set_override(bool state){
             fault_override = state;
@@ -55,9 +72,7 @@ class DRV {
             float R_frac = 7.8;  // 68k + 10k / 10k
             return (float)PVDD_raw * 3.3 / 4095 * R_frac;
         }
-        void set_gain(float gain){
-            current_gain = gain;
-        }
+
         void set_MOC(bool state){
             gpio_set_level(MOC, state ? 1 : 0);
         }
@@ -65,6 +80,7 @@ class DRV {
         int get_RPM(float electrical_freq){
             return (int)(electrical_freq * 60 / MOTOR_POLE_PAIRS);
         }
+
 
     private: 
         // DRV data
@@ -101,24 +117,27 @@ class DRV {
 
         // Alignment and offset
         bool aligned = false;
-        bool offset_calibrated = false;
         float offset = 0.0;
         float align_time = 0.0;
-        float ALIGN_DURATION = 0.5;   // 500 ms
+        float ALIGN_DURATION = 1.5f;   // 1500 ms
+        float ALIGN_DUTY = 15.0f;
 
         // Waveform generation
-        uint32_t PWM_freq = 20000; // 20 kHz carrier frequency
+        uint32_t PWM_freq = 20000; // 20 kHz carrier frequency for MCPWM
         float phase_accumulator = 0;
-        float modulation_index = 0.8; // Amplitude (0.0 to 1.0) if higher -> overmodulation
+        float modulation_index = 1; // Amplitude (0.0 to 1.0) if higher -> overmodulation
         float electrical_freq = 2; // Motor Frequency (Hz), speed of the rotating field, higher than 0.5 to avoid deadzone
-        float target_electrical_freq = 60; // Target frequency for smooth transitions
         float elec_offset = 0.0f; 
 
         // Ramping control
-        bool ramp_done = false; 
         float ramp_rate = 100.0f; // How fast to change frequency (Hz/s)
+        float ramp_active = false;
+        float ramp_target_freq = 0.0f;
         float ramp_duration = 0.2f;
         float dt = 0.000050f; // Elapsed time (assuming 50us)
+
+        // Spinning control
+        float spin_elapsed = 0.0f;
 
 
     };

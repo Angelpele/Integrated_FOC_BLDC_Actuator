@@ -1,0 +1,8 @@
+Board up to 16V       											Board up to 36V
+-----------------------------------------------							-----------------------------------------------------------
+Gate resistors 10R												Gate resistors 22R
+TVS input SMAJ30CA											TVS input SMCJ45CA
+no ext cap required											Suggested external cap 1000uF (50V)
+IRF mosfets can be used										FH4008 Mosfets required
+						
+12uH inductor												22uF inductor

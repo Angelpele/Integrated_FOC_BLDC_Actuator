@@ -2,3 +2,10 @@
 
 280mm Mod index 0.8 Electrical freq 60, 240g
 
+Mod index 1 Electrical freq 10, 550g - 630g Max
+
+
+
+Motor mass 286.92g
+
+Motor + 6 bolts + lower pre_arm 380.23g

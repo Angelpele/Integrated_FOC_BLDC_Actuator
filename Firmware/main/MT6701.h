@@ -57,20 +57,12 @@ private:
     uint8_t SSI_get_mag_status(uint32_t raw);
     uint8_t SSI_get_CRC(uint32_t raw);
 
-    int lastCount = 0;
-    int accumulator = 0;
     float offset = 0;
-
-    float rpm = 0.0f;
-    uint32_t lastUpdateTime = 0;
     bool fault_override = false;
 
     static constexpr int   COUNTS_PER_REV = 16384;
     static constexpr float COUNTS_TO_DEG  = 360.0f / COUNTS_PER_REV;
     static constexpr float COUNTS_TO_RAD  = 6.28318530718f / COUNTS_PER_REV;
-
-    SemaphoreHandle_t rpmMutex = nullptr;
-    void updateCount();
 };
 
 #endif

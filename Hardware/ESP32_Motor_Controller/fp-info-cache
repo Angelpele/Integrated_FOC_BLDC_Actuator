@@ -1,4 +1,4 @@
-25233609705545525
+25217781483342219
 Audio_Module
 Reverb_BTDR-1H
 Digital Reverberation Unit, http://www.belton.co.kr/inc/downfile.php?seq=17&file=pdf (footprint from http://www.uk-electronic.de/PDF/BTDR-1.pdf)
@@ -13,20 +13,6 @@ audio belton reverb
 0
 7
 7
-B3030A
-B3030A
-
-
-0
-2
-2
-BMI270
-XDCR_BMI270
-
-
-0
-14
-14
 Battery
 BatteryClip_Keystone_54_D16-19mm
 Battery clip for batteries with a diameter between 16-19 mm: https://www.keyelco.com/product.cfm/product_id/826
@@ -55992,13 +55978,6 @@ SMD SMT ceramic resonator filter filter hand-soldering
 0
 3
 3
-DRV8302
-DRV8302
-
-
-0
-57
-57
 Diode_SMD
 D_0201_0603Metric
 Diode SMD 0201 (0603 Metric), square (rectangular) end terminal, IPC-7351 nominal, (Body size source: https://www.vishay.com/docs/20052/crcw0201e3.pdf), generated with kicad-footprint-generator
@@ -66723,13 +66702,6 @@ Yellow 5381 Series LED
 0
 2
 2
-MCP2551-I_SN
-SOIC127P599X175-8N
-
-
-0
-8
-8
 MPM3610GQV-P
 CONV_MPM3610GQV-P
 
@@ -66737,13 +66709,6 @@ CONV_MPM3610GQV-P
 0
 14
 14
-MT6701CT-STD-R
-SOIC127P600X175-8N
-MT6701CT-STD-R
-Integrated Circuit
-0
-8
-8
 Module
 A20_OLINUXINO_LIME2
 A20 Olinuxino LIME2, 1.2GHz, 512-1024MB RAM, Micro-SD, NAND or eMMC, 1000Mbit Ethernet
@@ -92441,13 +92406,6 @@ rotary encoder illuminated switch vertical
 0
 9
 8
-SM7850 Inductor
-SM7850
-
-
-0
-2
-2
 Sensor
 ASAIR_AM2302_P2.54mm_Lead2.75mm_TabDown
 Temperature and humidity module, http://akizukidenshi.com/download/ds/aosong/AM2302.pdf
@@ -94541,13 +94499,6 @@ Logo WEEE
 0
 0
 0
-TS-1088-AR02016
-SW_TS-1088-AR02016
-
-
-0
-2
-2
 TerminalBlock
 TerminalBlock_Altech_AK300-2_P5.00mm
 Altech AK300 terminal block, pitch 5.0mm, 45 degree angled, see http://www.mouser.com/ds/2/16/PCBMETRC-24178.pdf
@@ -100568,13 +100519,6 @@ igbt diode module
 0
 25
 25
-USB_C_Receptacle_Palconn_UTC16-G
-USB_C_Receptacle_Palconn_UTC16-G
-http://www.palpilot.com/wp-content/uploads/2017/05/UTC027-GKN-OR-Rev-A.pdf
-USB C Type-C Receptacle USB2.0
-0
-20
-17
 Valve
 Valve_ECC-83-1
 Valve ECC-83-1 round pins
@@ -101359,17 +101303,10 @@ Varistor VF
 0
 2
 2
-XT30PW-M
-AMASS_XT30PW-M
-
-
-0
-4
-4
-XT30PW-M
-Untitled
-
+XRS80P06F
+XRS80P06F
+<b>PowerPAK SO-8 Single_1-2</b><br>
 
 0
-0
-0
+9
+9

@@ -6,8 +6,9 @@
 	(paper "A4")
 	(title_block
 		(title "CONTROLLER")
-		(date "2025-04-04")
-		(company "APeleV")
+		(date "2026-04-07")
+		(rev "2")
+		(company "ANGEL PELEGRY VELASCO")
 	)
 	(lib_symbols)
 	(sheet
