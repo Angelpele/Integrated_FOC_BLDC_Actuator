@@ -70,6 +70,7 @@ This project focuses on the development of a robust FOC controller for BLDC moto
 - **Cycloidal Gearbox**: For torque amplification and precision gain, 15:1 gear reduction. Features dual disc configuration to supress motor vibrations.
 - **Modified motor coupling**: The motor and gearbox coupler presents a D slot to transfer the rotation power without the need for small screws as in previous versions.
 - **Integrated bearings**: Metallic bearings offer a smooth movement of the gearbox with outer steel pins.
+- **Integrated Motor**: 5010 750KV motor integrated into the enclosure.
 - **Integrated PCB**: The PCB support has been designed to be as compact as possible, reading the magnet from the motor axis and preventing external cables outside the casing.
 - **Custom PCB (V1)**: Compact integration of ESP32-S3, DRV8302, MT6701, BMI270, MCP2551, and NTC. Schematic available in `ESP32_Motor_Controller_V1.pdf`.
 - **Custom PCB (V2)**: Several improvements implemented and corrected errors from V1:
