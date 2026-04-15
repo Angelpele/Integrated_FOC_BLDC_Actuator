@@ -52,12 +52,12 @@ This project focuses on the development of a robust FOC controller for BLDC moto
 ---
 
 <p align="center">
-  <img src="Media/Front PCB soldered crop.jpg" height="350" />
-  <img src="Media/Back PCB soldered.jpg" height="350" />
+  <img src="Media/Front PCB soldered crop.jpg" height="250" />
+  <img src="Media/Back PCB soldered.jpg" height="250" />
 </p>
 <p align="center">
-  <img src="Media/PCB_top V1.png" height="380" />
-  <img src="Media/PCB_layout V1.png" height="380" />
+  <img src="Media/PCB_top V1.png" height="280" />
+  <img src="Media/PCB_layout V1.png" height="280" />
 </p>
 <p align="center">
   <em>Soldered PCB V1</em>
@@ -89,8 +89,8 @@ This project focuses on the development of a robust FOC controller for BLDC moto
 
 ---
 <p align="center">
-  <img src="Media/Complete Cycloidal Drive Assembly Section View V3.png" height="350" />
-  <img src="Media/Section View V1.png" height="350" />
+  <img src="Media/Complete Cycloidal Drive Assembly Section View V3.png" height="250" />
+  <img src="Media/Section View V1.png" height="250" />
 </p>
 
 <p align="center">
