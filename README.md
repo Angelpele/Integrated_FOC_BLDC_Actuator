@@ -129,7 +129,7 @@ All shared data (`drv_pkg`, `mag_pkg`) is protected by FreeRTOS mutexes.
 
 1. **Alignment (Open loop)**: Ramps duty cycle over 500 ms to lock rotor to a known electrical angle. Computes `elec_offset` from the MT6701 reading at alignment.
 2. **Frequency Ramp**: Linearly ramps `electrical_freq` from 2 Hz to `target_electrical_freq` (20 Hz default) at 100 Hz/s.
-3. **Closed Loop SPWM**: Uses MT6701 angle + `elec_offset` + pole pairs (7) to compute instantaneous electrical angle. Generates three 120° offset sinusoidal duties on MCPWM timers 0–2 with center-aligned PWM and 1 µs hardware dead-time (40 ticks @ 40 MHz).
+3. **Closed Loop SPWM**: Uses MT6701 angle + `elec_offset` + pole pairs (7) to compute instantaneous electrical angle.
 
 Motor parameters (5010 750KV, 14 poles, 270 mΩ phase resistance, 40 A max) are defined as `constexpr` in `DRV.h`.
 
