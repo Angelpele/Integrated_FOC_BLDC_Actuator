@@ -154,7 +154,6 @@ Integration with ROS2 and a graphical PID tuning interface are planned for futur
 ## **References**
 - [SimpleFOC Library](https://github.com/simplefoc/simplefoc)
 - [ODrive Pro Documentation](https://docs.odriverobotics.com/v/latest/hardware/pro-datasheet.html)
-- [Qihao Guo — Motor Control](https://www.youtube.com/@QihaoGuo)
 - DRV8302 Datasheet (`drv8302.pdf`)
 - MT6701 SSI Encoder Datasheet
 - ESP32-S3 WROOM Datasheet (`ESp32_S3_WROOM.pdf`)
