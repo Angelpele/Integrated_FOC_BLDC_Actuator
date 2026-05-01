@@ -20,8 +20,6 @@ int DRV::init()
     gpio_set_direction(DC_CAL, GPIO_MODE_OUTPUT);
     gpio_set_direction(MPWM, GPIO_MODE_OUTPUT);
     gpio_set_direction(MOC, GPIO_MODE_OUTPUT);
-    gpio_set_direction(C_SENSE, GPIO_MODE_INPUT);
-    gpio_setpullmode(C_SENSE, GPIO_PULLUP_ONLY);
 
     gpio_set_level(INL_A, 0);
     gpio_set_level(INH_A, 0);
@@ -89,8 +87,6 @@ int DRV::calibration()
     gpio_set_level(DC_CAL, 0);
 
     //Restore C_sense pin to normal operation
-    gpio_setpullmode(C_SENSE, GPIO_NO_PULL); // Disable pull-up
-    gpio_set_direction(C_SENSE, GPIO_MODE_INPUT); // Set as input
     adc1_config_channel_atten(C_SENSE, ADC_ATTEN_DB_12);
 
     printf("DRV Offsets -> SO1: %d | SO2: %d\n", SO1_offset, SO2_offset);
@@ -116,10 +112,10 @@ DRV_data DRV::getdata()
     package.A_raw = adc1_get_raw(A_SENSE);
     package.B_raw = adc1_get_raw(B_SENSE);
     package.C_raw = adc1_get_raw(C_SENSE);
-    //SO1_raw = adc1_get_raw(SO1);
-    //SO2_raw = adc1_get_raw(SO2);
-    SO1_raw = 0;
-    SO2_raw = 0;
+    SO1_raw = adc1_get_raw(SO1);
+    SO2_raw = adc1_get_raw(SO2);
+    //SO1_raw = 0;
+    //SO2_raw = 0;
     package.current1 = (float)(SO1_offset - SO1_raw) * voltage_step / (current_gain * R_shunt);
     package.current2 = (float)(SO2_offset - SO2_raw) * voltage_step / (current_gain * R_shunt);
     
@@ -170,10 +166,10 @@ int DRV::fault_detection()
     else {
         nfault_glitch_count = 0;
         if (latch_counter > 0)
-            latch_counter--;
+            latch_counter = 0;
     }
 
-    if (latch_counter >= 100) {
+    if (latch_counter >= 1000) {
         printf("Fault threshold reached -> Driver must be reset\n");
         return DRV_LATCHED;
     }
@@ -349,7 +345,6 @@ void DRV::idle() {
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 0.0f);
 }
 
-
 void DRV::test_working_trans() {
     struct TestStep {
         const char* msg;
@@ -376,4 +371,58 @@ void DRV::test_working_trans() {
         
         vTaskDelay(pdMS_TO_TICKS(1));
     }
+}
+
+float DRV::real_RPM(float angle_deg)
+{
+    int64_t now_us = esp_timer_get_time();
+    int64_t dt_us  = now_us - rpm_last_time;
+
+    // Initialize rpm filter
+    if (rpm_last_time == 0 || dt_us < RPM_MIN_DT_US) {
+        rpm_last_time  = now_us;
+        rpm_last_angle = angle_deg;
+        return rpm_filtered;
+    }
+
+    // Wrap angular delta [-180, +180]
+    float delta = angle_deg - rpm_last_angle;
+    if      (delta >  RPM_UNWRAP_THR) delta -= 360.0f;
+    else if (delta < -RPM_UNWRAP_THR) delta += 360.0f;
+
+    // delta [deg] / 360 [deg/rev] / dt [min]  →  RPM
+    float dt_min  = (float)dt_us * (1.0f / 60'000'000.0f);
+    float raw_rpm = (delta / 360.0f) / dt_min;
+
+    // Exponential moving average
+    rpm_filtered = RPM_LPF * raw_rpm + (1.0f - RPM_LPF) * rpm_filtered;
+
+    rpm_last_angle = angle_deg;
+    rpm_last_time  = now_us;
+
+    return rpm_filtered;
+}
+
+float DRV::reducer_angle(float motor_angle) {
+    if (!initialized) {
+        last_angle  = motor_angle;
+        reducer     = 0.0f;          // start relative to zero, not absolute
+        initialized = true;
+        return reducer;
+    }
+
+    // Shortest-path delta on the motor side: always in (-180, +180]
+    float delta = fmodf(motor_angle - last_angle, 360.0f);
+    if (delta >  180.0f) delta -= 360.0f;
+    if (delta < -180.0f) delta += 360.0f;
+
+    // Scale down by gear ratio
+    reducer += delta / reducer_ratio;
+
+    // Normalize reducer angle to [0, 360)
+    reducer = fmodf(reducer, 360.0f);
+    if (reducer < 0.0f) reducer += 360.0f;
+
+    last_angle = motor_angle;
+    return reducer;
 }

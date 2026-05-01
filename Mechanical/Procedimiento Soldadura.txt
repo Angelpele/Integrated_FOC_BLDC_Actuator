@@ -10,7 +10,8 @@
 10- Soldar componentes pasivos traseros y TLV
 
 Pasta aplicada -> componente a la cama (no dejar componentes sin soldar que la pasta endurece)
-El cátodo de los diodos y leds es o la línea o la parte verde (se suelda hacia el lado rodeado por silkscreen)
+El cátodo de los diodos y leds es o la línea o la parte verde (esta se suelda hacia el lado rodeado por silkscreen)
+SRV05 letra al ver bien la letra, el punto está abajo a la izquierda, debajo de la V.
 
 
 

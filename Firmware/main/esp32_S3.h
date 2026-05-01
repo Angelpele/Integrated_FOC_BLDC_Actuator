@@ -12,6 +12,7 @@
 #include "driver/uart.h"
 #include "esp_rom_sys.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_task_wdt.h"
 #include "soc/timer_group_struct.h"
 #include "soc/timer_group_reg.h"
@@ -23,7 +24,7 @@
 
 
 // GENERAL GPIO //
-#define MOTOR_ID 0
+#define MOTOR_ID 1
 
 #define SERIAL_RATE 100   
 
@@ -85,13 +86,36 @@ enum SystemState {
     SYSTEM_RUNNING,
 };
 
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t ID;
+    float pvdd;
+    float i1;
+    float i2;
+    float i3;
+    float temp;
+    float angle;
+    float red_angle;
+    float rpm;
+    float red_rpm;
+
+    uint16_t A;
+    uint16_t B;
+    uint16_t C;
+
+    uint8_t nfault;
+    uint8_t oc;
+} TelemetryPacket;
+#pragma pack(pop)
+
+
 //Timer 1MHz
 #define TIMER_DIVIDER 80          // 80 MHz / 80 = 1 MHz timer
 #define TIMER_INTERVAL_US 50      // 50 µs → 20 kHz
 
 #define FOC_DIVIDER        1    //20khz (max 200 khz)
 #define MAG_DIVIDER        4    //5khz
-#define DRV_DIVIDER        40   //500hz  
+#define DRV_DIVIDER        40   //500Hz  
 #define TELEMETRY_DIVIDER  1000  // 20hz
 
 #endif

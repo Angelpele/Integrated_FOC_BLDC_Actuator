@@ -36,8 +36,8 @@ typedef struct {
     uint16_t A_raw;
     uint16_t B_raw;
     uint16_t C_raw;
-    uint16_t NFAULT_raw;
-    uint16_t NOCTW_raw;
+    uint8_t NFAULT_raw;
+    uint8_t NOCTW_raw;
     float temperature;
 }DRV_data;
 
@@ -51,6 +51,8 @@ class DRV {
         int fault_detection();
 
         void pwm_init();
+        float real_RPM(float angle_deg);
+        float reducer_angle(float motor_angle);
         void setup_mcpwm();
         AlignOffset align(float angle);
         bool ramp(float angle, float init_freq, float obj_freq, float duration_s);
@@ -69,7 +71,7 @@ class DRV {
         }
 
         float getPVDD(int PVDD_raw){
-            float R_frac = 7.8;  // 68k + 10k / 10k
+            float R_frac = 11;  // 100k + 10k / 10k
             return (float)PVDD_raw * 3.3 / 4095 * R_frac;
         }
 
@@ -77,8 +79,8 @@ class DRV {
             gpio_set_level(MOC, state ? 1 : 0);
         }
 
-        int get_RPM(float electrical_freq){
-            return (int)(electrical_freq * 60 / MOTOR_POLE_PAIRS);
+        float reducer_RPM(float motor_RPM){
+            return motor_RPM / reducer_ratio;
         }
 
 
@@ -101,6 +103,7 @@ class DRV {
         static constexpr int MOTOR_POLE_PAIRS = 7;   // 14 poles
         static constexpr int MOTOR_RESISTANCE = 270; // mOhm
         static constexpr int MOTOR_MAX_CURRENT = 40; // Amps
+        static constexpr float reducer_ratio = 15.0f; // Reducer ratio
 
         // DRV current sensing
         float current_gain = 40.0; 
@@ -111,7 +114,7 @@ class DRV {
         float last_temperature = 0.0f;
         
         // Fault handling
-        uint8_t latch_counter = 0;
+        uint16_t latch_counter = 0;
         bool fault_override = false;
         uint8_t nfault_glitch_count = 0; 
 
@@ -139,7 +142,21 @@ class DRV {
         // Spinning control
         float spin_elapsed = 0.0f;
 
+        // Reducer angle
+        float last_angle = 0.0f;
+        float reducer = 0.0f;
+        bool initialized = false;
 
+        // RPM calculation
+        float   rpm_last_angle  = 0.0f;
+        int64_t rpm_last_time   = 0;
+        float   rpm_filtered    = 0.0f;
+        
+
+        static constexpr float RPM_LPF      = 0.10f; 
+        static constexpr float RPM_UNWRAP_THR     = 180.0f;
+        static constexpr int64_t RPM_MIN_DT_US    = 100;    // guard against /0 on first call
+        
     };
 
 class NTC_sensor {

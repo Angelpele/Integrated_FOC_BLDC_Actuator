@@ -15,6 +15,7 @@ DRV drv;
 MT6701 mag;
 DRV_data drv_pkg;
 mag_data mag_pkg;
+TelemetryPacket pkg;
 
 SemaphoreHandle_t drv_mutex = NULL;
 SemaphoreHandle_t mag_mutex = NULL;
@@ -31,7 +32,7 @@ void drvLoop(void* arg);
 void telemetryLoop(void* arg);
 
 SystemState system_state = SYSTEM_INIT;
-DRV_MotionState motion = MOTION_ALIGNING;
+DRV_MotionState motion = MOTION_IDLE;
 bool debug_mode_enabled = true;
 
 
@@ -71,7 +72,7 @@ extern "C" void app_main(void)
             {
                 if (calibration() == 0) {
                     printf("\nRunning....\n");
-                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    vTaskDelay(pdMS_TO_TICKS(200));
                     create_tasks_once();
                     start_control_timer();
                     system_state = SYSTEM_RUNNING;
@@ -146,7 +147,7 @@ void create_tasks_once() {
         xTaskCreatePinnedToCore(focLoop, "focLoop", 4096, NULL, 12, &focTaskHandle, 1);  //1 and 0 are the core IDs
         xTaskCreatePinnedToCore(magLoop, "magLoop", 4096, NULL, 11, &magTaskHandle, 0);
         xTaskCreatePinnedToCore(drvLoop, "drvLoop", 4096, NULL, 10, &drvTaskHandle, 0);
-        xTaskCreatePinnedToCore(telemetryLoop, "telemetryLoop", 4096, NULL, 7, &telemetryTaskHandle, 0);
+        xTaskCreatePinnedToCore(telemetryLoop, "telemetryLoop", 8192, NULL, 7, &telemetryTaskHandle, 0);
         tasks_created = true;
     }
 }
@@ -162,18 +163,16 @@ void focLoop(void* arg){
 
         switch (motion) {
             case MOTION_ALIGNING:
-                if (drv.align(angle).done)
-                    motion = MOTION_RAMPING;
+                drv.align(angle).done;
                 break;
 
             case MOTION_RAMPING:
-                if (drv.ramp(angle, 2.0f, 10.0f, 1.5f))   //Initial freq and target freq
+                if (drv.ramp(angle, 2.0f, 20.0f, 1.5f))   //Initial freq and target freq
                     motion = MOTION_SPINNING;
                 break;
 
             case MOTION_SPINNING:
-                if (drv.spin(angle, 10.0f, 3.0f)) // Spinning freq
-                    
+                drv.spin(angle, 20.0f, 3.0f); // Spinning freq
                 break;
 
             case MOTION_RAMPING_DOWN:
@@ -216,32 +215,63 @@ void drvLoop(void* arg) {
 }
 
 void telemetryLoop(void* arg) {
-    if (debug_mode_enabled) {
-        esp_task_wdt_add(NULL);
-        static char buf[192];
+    static char buf[300];
+    if (!debug_mode_enabled) {
+        vTaskDelete(NULL);          // Delete the task if debug mode is disabled
+    }
     
-        while (true) {
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-            DRV_data td;
-            mag_data tm;
-    
-            if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
-                td = drv_pkg;
-                xSemaphoreGive(drv_mutex);
-            } if (xSemaphoreTake(mag_mutex, portMAX_DELAY) == pdTRUE) {
-                tm = mag_pkg;
-                xSemaphoreGive(mag_mutex);
-            }
-            snprintf(buf, sizeof(buf),
-                "PVDD:%.2fV | I1:%.2f I2:%.2f I3:%.2f | A:%d B:%d C:%d | NFault:%d OC:%d | NTC:%.1f | Ang:%.2fº State:%d\n",
-                td.PVDD,
-                td.current1, td.current2, -(td.current1 + td.current2),
-                td.A_raw, td.B_raw, td.C_raw,
-                td.NFAULT_raw, td.NOCTW_raw, td.temperature,
-                tm.angle, tm.status);
-    
+    while (true) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        DRV_data td;
+        mag_data tm;
+
+        if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
+            td = drv_pkg;
+            xSemaphoreGive(drv_mutex);
+        } if (xSemaphoreTake(mag_mutex, portMAX_DELAY) == pdTRUE) {
+            tm = mag_pkg;
+            xSemaphoreGive(mag_mutex);
+        }
+        float motor_rpm = drv.real_RPM(tm.angle);
+
+        int len = snprintf(
+            buf, sizeof(buf),
+            "%d,%.3f,%.3f,%.3f,%.3f,%2d,%3d,%3d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n",
+            MOTOR_ID,
+            td.PVDD,
+            td.current1,
+            td.current2,
+            -(td.current1 + td.current2),
+            td.A_raw,
+            td.B_raw,
+            td.C_raw,
+            td.NFAULT_raw,
+            td.NOCTW_raw,
+            td.temperature,
+            tm.angle,
+            drv.reducer_angle(tm.angle),
+            motor_rpm,
+            drv.reducer_RPM(motor_rpm)
+        );
+
+        if (len > 0) {
             printf("%s", buf);
-            esp_task_wdt_reset();
+        }
+
+        char rxbuf[64];
+
+        if (fgets(rxbuf, sizeof(rxbuf), stdin) != NULL) {
+
+            char* cmd = strchr(rxbuf, ':');
+            if (cmd != NULL) {
+                cmd++;
+
+                if (strcmp(cmd, "IDLE") == 0) motion = MOTION_IDLE;
+                else if (strcmp(cmd, "ALIGN") == 0) motion = MOTION_ALIGNING;
+                else if (strcmp(cmd, "RUN") == 0) motion = MOTION_RAMPING;
+                else if (strcmp(cmd, "BRAKE") == 0) motion = MOTION_RAMPING_DOWN;
+                else if (strcmp(cmd, "STOP") == 0) gpio_set_level(EN_DRV, 0);
+            }
         }
     }
 }
@@ -268,7 +298,7 @@ void IRAM_ATTR controlISR(void* arg)
     if (tick % TELEMETRY_DIVIDER == 0)
         vTaskNotifyGiveFromISR(telemetryTaskHandle, &woken);
 
-    if (woken) portYIELD_FROM_ISR();
+    portYIELD_FROM_ISR(woken);
 }
 
 
