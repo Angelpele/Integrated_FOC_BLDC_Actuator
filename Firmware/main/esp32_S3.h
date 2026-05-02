@@ -10,6 +10,7 @@
 #include "driver/timer.h"
 #include "driver/ledc.h"
 #include "driver/uart.h"
+#include "driver/spi_master.h"
 #include "esp_rom_sys.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -21,6 +22,8 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "math.h"
+#include "fcntl.h"
+#include "driver/usb_serial_jtag.h"
 
 
 // GENERAL GPIO //
@@ -105,6 +108,14 @@ typedef struct {
 
     uint8_t nfault;
     uint8_t oc;
+/*
+    float accx;
+    float accy;
+    float accz;
+    float gyrx;
+    float gyry;
+    float gyrz;
+    uint8_t ffall;*/
 } TelemetryPacket;
 #pragma pack(pop)
 
@@ -115,6 +126,7 @@ typedef struct {
 
 #define FOC_DIVIDER        1    //20khz (max 200 khz)
 #define MAG_DIVIDER        4    //5khz
+#define BMI_DIVIDER        20   //1khz
 #define DRV_DIVIDER        40   //500Hz  
 #define TELEMETRY_DIVIDER  1000  // 20hz
 

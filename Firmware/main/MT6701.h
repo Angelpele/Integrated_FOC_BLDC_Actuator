@@ -10,7 +10,6 @@
 
 #define Delay_MAG 6   //Delay between CLK edges (30 ns min for MT6701)
 
-// Estructura de datos original
 typedef struct {
     float angle;
     uint8_t status;
@@ -29,7 +28,6 @@ public:
     void init();
     MT6701_Status calibration();
     mag_data getdata();
-    void printdata(mag_data);
 
     MT6701_Status fault_detection();
 

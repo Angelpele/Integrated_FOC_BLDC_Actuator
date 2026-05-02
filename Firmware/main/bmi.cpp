@@ -2,104 +2,254 @@
 //                                          BMI270 IMU + Gyro                                        //
 //                                            16 bit 3 axis                                          //
 //===================================================================================================//
+#include "esp32_S3.h"
+#include "bmi.h"
 
-#include "esp32.h"
-#include "stdio.h"
-#include "driver/gpio.h"  //ESP32 GPIO
-#include "esp_rom_sys.h"
-#include "bmi270.h"
-#include "bmi270.c"
+static spi_device_handle_t s_spi_handle = nullptr;
+ 
+static BMI2_INTF_RETURN_TYPE bmi2_spi_read(uint8_t reg_addr, uint8_t *reg_data, uint32_t len, void *intf_ptr) {
+    spi_device_handle_t spi = *static_cast<spi_device_handle_t *>(intf_ptr);
 
-#define Delay_MAG 1   //Delay between CLK edges (30 ns min for MT6701)
-//2 ms BMI power on time
+    spi_transaction_t t = {};
+    t.addr      = reg_addr | 0x80;
+    t.length    = 0;          // no tx data (address handled by addr field)
+    t.rxlength  = len * 8;
+    t.rx_buffer = reg_data;
 
-typedef struct{
-    float angle;
-    uint8_t status;
-    uint8_t push;
-}bmi_data;
+    esp_err_t ret = spi_device_polling_transmit(spi, &t);
+    return (ret == ESP_OK) ? BMI2_INTF_RET_SUCCESS : -1;
+}
+ 
+static BMI2_INTF_RETURN_TYPE bmi2_spi_write(uint8_t reg_addr, const uint8_t *reg_data, uint32_t len, void *intf_ptr) {
+    spi_device_handle_t spi = *static_cast<spi_device_handle_t *>(intf_ptr);
 
-void  bmi_init()
+    spi_transaction_t t = {};
+    t.addr = reg_addr & 0x7F;      // Write bit cleared
+    t.length = len * 8;            // Total bits to transmit
+    t.tx_buffer = reg_data;        // Data to write
+    esp_err_t ret = spi_device_polling_transmit(spi, &t);
+
+    return (ret == ESP_OK) ? BMI2_INTF_RET_SUCCESS : -1;
+}
+
+static void bmi2_delay_us(uint32_t period, void * /*intf_ptr*/)
 {
-    gpio_set_direction(MAG_DO, GPIO_MODE_INPUT);
-    gpio_set_direction(MAG_CLK, GPIO_MODE_OUTPUT);
-    gpio_set_direction(MAG_CSN, GPIO_MODE_OUTPUT);
-
-    gpio_set_level(MAG_CLK, 0);
-    gpio_set_level(MAG_CSN, 1);     // Active LOW
+    if (period <= 1000) {
+        esp_rom_delay_us(period);
+    } else {
+        vTaskDelay(pdMS_TO_TICKS(period / 1000));
+    }
 }
 
 
-
-float calibration()
-{                                  // Return offset value
-    uint32_t sum = 0;
-    uint32_t data = 0;
-    uint8_t error = 0;
-    gpio_set_level(MAG_CSN, 0);
-
-    for(int i=0; i<1000;i++)
-    {
-        data = SSI_read_raw();
-        sum += SSI_get_ang(data);
-
-        uint8_t mag = SSI_get_mag_status(data);
-        if(mag & 0x1) error++;          // Too Strong field, bit 0
-        if(mag & 0x2) error--;          // Too Weak field, bit 1
-
-        esp_rom_delay_us(2000);
+BMI_Status BMI270::init() {
+    gpio_set_direction(BMI_CS,  GPIO_MODE_OUTPUT);
+    gpio_set_level(BMI_CS, 1);          // CS active (active low), toggled by SPI
+    
+    for(int i=0; i<16; i++) {
+        gpio_set_level(BMI_SCK, 1);
+        esp_rom_delay_us(10);
+        gpio_set_level(BMI_SCK, 0);
+        esp_rom_delay_us(10);
     }
     
-    if(abs(error) > 500){
-        return error > 0 ? -1.0f : -2.0f;                   //-1 for Strong field error, -2 for weak field error
-    }
-    gpio_set_level(MAG_CSN, 1);
-    return ((float)sum/16384000 * 360);
-}
-
-uint32_t SSI_read_raw()
-{
-    uint32_t raw = 0;
+    spi_bus_config_t bus_cfg = {};
+    bus_cfg.mosi_io_num   = BMI_SDA;
+    bus_cfg.miso_io_num   = -1;    // shared data line (3-wire)
+    bus_cfg.sclk_io_num   = BMI_SCK;
+    bus_cfg.quadwp_io_num = -1;
+    bus_cfg.quadhd_io_num = -1;
+    bus_cfg.max_transfer_sz = 64;
     
-    for (int i = 0; i < 24; i++)
-    {
-        gpio_set_level(MAG_CLK, 1);             //MAG_DO reads the value on the rising edge of CLK
-        esp_rom_delay_us(Delay_MAG);
-        raw <<= 1;                              // Shift MSB received to the left 1 bit
-        raw |= gpio_get_level(MAG_DO);          // Set value of MAG_DO in LSB
-        gpio_set_level(MAG_CLK, 0);
-        esp_rom_delay_us(Delay_MAG);
-    }
-    return raw;
-}
-
-mag_data get_mag_data()
-{
-    uint32_t sum = 0;
-    uint32_t data = 0;
-    mag_data package;
-
-    data = SSI_read_raw();
-    package.angle = (float)SSI_get_ang(data)/16384 * 360;
-    uint8_t mg = SSI_get_mag_status(data);
-    package.push = (mg >> 2) & 0x01;             // Active HIGH, shift 2 bits to the right and mask
-    package.status = (mg >> 3) & 0x01;           // If 1, loss of track
     
-    return package;
+    spi_device_interface_config_t dev_cfg = {};
+    dev_cfg.command_bits    = 0;
+    dev_cfg.address_bits    = 8;        // address sent manually in tx buffer
+    dev_cfg.dummy_bits      = 0;
+    dev_cfg.mode            = 0;        
+    dev_cfg.clock_speed_hz  = 1 * 1000 * 1000;   // 2 MHz (safe for config phase)
+    dev_cfg.spics_io_num    = BMI_CS;
+    dev_cfg.queue_size      = 1;
+    dev_cfg.flags           = SPI_DEVICE_HALFDUPLEX | SPI_DEVICE_NO_DUMMY;
+    
+    static bool spi_initialized = false;
+    
+    // Initialize the SPI bus
+    if (!spi_initialized) {
+        spi_bus_initialize(SPI2_HOST, &bus_cfg, SPI_DMA_CH_AUTO);
+        spi_initialized = true;
+    }
+
+    esp_err_t ret = spi_bus_add_device(SPI2_HOST, &dev_cfg, &s_spi_handle);
+    if (ret != ESP_OK) {
+        printf("BMI270 SPI add device failed: %d\n", ret);
+        return BMI_ERR;
+    }
+    vTaskDelay(pdMS_TO_TICKS(10));
+    
+    dev = {};                               // zero-initialise the whole struct
+    dev.intf      = BMI2_SPI_INTF;          // tells the driver dummy_byte = 1
+    dev.read      = bmi2_spi_read;
+    dev.write     = bmi2_spi_write;
+    dev.delay_us  = bmi2_delay_us;
+    dev.intf_ptr  = &s_spi_handle;          // passed back in every callback
+    dev.read_write_len = 32;
+
+    uint8_t spi3_config = 0x01; 
+    bmi2_set_regs(0x41, &spi3_config, 1, &dev); 
+
+    // Verify chip id before init
+    uint8_t chip_id = 0;
+    bmi2_get_regs(BMI2_CHIP_ID_ADDR, &chip_id, 1, &dev);
+    printf("BMI270 CHIP ID: 0x%02X\n", chip_id);
+
+
+    int8_t rslt = bmi270_init(&dev);
+    if (rslt != BMI2_OK) {
+        printf("BMI270 init failed: %d\n", rslt);
+        return BMI_ERR;
+    }
+ 
+    struct bmi2_sens_config config[2] = {};
+    config[0].type = BMI2_ACCEL;
+    config[1].type = BMI2_GYRO;
+ 
+    rslt = bmi270_get_sensor_config(config, 2, &dev);
+    if (rslt != BMI2_OK) {
+        printf("BMI270 get config failed: %d\n", rslt);
+        return BMI_ERR;
+    }
+ 
+    config[0].cfg.acc.range       = BMI2_ACC_RANGE_2G;  // Lowest value for acc
+    config[0].cfg.acc.odr         = BMI2_ACC_ODR_400HZ; // 200, 400, 800, 1600
+    config[0].cfg.acc.bwp         = BMI2_ACC_NORMAL_AVG4;
+    config[0].cfg.acc.filter_perf = BMI2_PERF_OPT_MODE;
+
+    config[1].cfg.gyr.range       = BMI2_GYR_RANGE_2000;
+    config[1].cfg.gyr.odr         = BMI2_GYR_ODR_400HZ;
+    config[1].cfg.gyr.bwp         = BMI2_GYR_NORMAL_MODE;
+    config[1].cfg.gyr.filter_perf = BMI2_PERF_OPT_MODE;
+    config[1].cfg.gyr.noise_perf  = BMI2_PERF_OPT_MODE;
+ 
+    rslt = bmi270_set_sensor_config(config, 2, &dev);
+    if (rslt != BMI2_OK) {
+        printf("BMI270 set config failed: %d\n", rslt);
+        return BMI_ERR;
+    }
+ 
+    struct bmi2_sens_config sig_cfg = {};
+    sig_cfg.type = BMI2_SIG_MOTION;
+ 
+    rslt = bmi270_get_sensor_config(&sig_cfg, 1, &dev);
+    if (rslt == BMI2_OK) {
+        sig_cfg.cfg.sig_motion.block_size = 0x0A;   // 10 samples = 200 ms at 50Hz
+        bmi270_set_sensor_config(&sig_cfg, 1, &dev);
+    }
+ 
+    uint8_t sensor_list[3] = {BMI2_ACCEL, BMI2_GYRO, BMI2_SIG_MOTION};
+    rslt = bmi270_sensor_enable(sensor_list, 3, &dev);
+    if (rslt != BMI2_OK) {
+        printf("BMI270 sensor enable failed: %d\n", rslt);
+        return BMI_ERR;
+    }
+ 
+
+    return BMI_OK;
 }
 
-uint16_t SSI_get_ang (uint32_t raw)
+BMI_Status BMI270::calibration()
 {
-    return (uint16_t)(raw & ((1U << 14) - 1U));   // Angle bits from bit 0:13 MSB first D[13:0], masked with 14 "0" bits
-}
+    printf("Starting BMI270 Calibration...\n");
+    const int num_samples = 100;
+    float sum_acc[3] = {0, 0, 0};
+    float sum_gyr[3] = {0, 0, 0};
+    int valid_samples = 0;
 
-uint8_t SSI_get_mag_status (uint32_t raw)
+    while (valid_samples < num_samples) {
+        uint8_t status = 0;
+
+        if (bmi2_get_status(&status, &dev) == BMI2_OK) {
+            if ((status & BMI2_DRDY_ACC) && (status & BMI2_DRDY_GYR)) {
+                struct bmi2_sens_data raw = {};
+
+                if (bmi2_get_sensor_data(&raw, &dev) == BMI2_OK) {
+                    sum_acc[0] += raw.acc.x;
+                    sum_acc[1] += raw.acc.y;
+                    sum_acc[2] += raw.acc.z;
+
+                    sum_gyr[0] += raw.gyr.x;
+                    sum_gyr[1] += raw.gyr.y;
+                    sum_gyr[2] += raw.gyr.z;
+
+                    valid_samples++;
+                }
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+
+    accel_bias[0] = sum_acc[0] / num_samples;
+    accel_bias[1] = sum_acc[1] / num_samples;
+    accel_bias[2] = (sum_acc[2] / num_samples) - 16384.0f; // remove gravity
+
+    gyro_bias[0] = sum_gyr[0] / num_samples;
+    gyro_bias[1] = sum_gyr[1] / num_samples;
+    gyro_bias[2] = sum_gyr[2] / num_samples;
+
+    printf("Calibration OK\n");
+    printf("Accel bias: %.2f %.2f %.2f\n", accel_bias[0], accel_bias[1], accel_bias[2]);
+    printf("Gyro bias: %.2f %.2f %.2f\n", gyro_bias[0], gyro_bias[1], gyro_bias[2]);
+    return BMI_OK;
+}
+ 
+BMI_data BMI270::getdata()
 {
-    return (uint8_t)((raw >> 14) & ((1U << 4) - 1U));   // Mag Status bits from bit 14:17 MSB first Mg[3:0], masked with 4 "0" bits
+    BMI_data data = {};
+ 
+    struct bmi2_sens_data raw = {};
+    int8_t rslt = bmi2_get_sensor_data(&raw, &dev);
+ 
+    if (rslt == BMI2_OK) {
+        data.accx = (static_cast<float>(raw.acc.x) - accel_bias[0]) * ACCEL_RES_2G;
+        data.accy = (static_cast<float>(raw.acc.y) - accel_bias[1]) * ACCEL_RES_2G;
+        data.accz = (static_cast<float>(raw.acc.z) - accel_bias[2]) * ACCEL_RES_2G;
+ 
+        data.gyrx = (static_cast<float>(raw.gyr.x) - gyro_bias[0]) * GYRO_RES_2000;
+        data.gyry = (static_cast<float>(raw.gyr.y) - gyro_bias[1]) * GYRO_RES_2000;
+        data.gyrz = (static_cast<float>(raw.gyr.z) - gyro_bias[2]) * GYRO_RES_2000;
+    }
+ 
+    uint16_t int_status = 0;
+    if (bmi2_get_int_status(&int_status, &dev) == BMI2_OK) {
+        data.ffall = ((int_status & BMI270_SIG_MOT_STATUS_MASK) != 0) ? 1 : 0;
+    }
+    return data;
 }
-
-uint8_t SSI_get_CRC (uint32_t raw)
+ 
+BMI_Status BMI270::fault_detection()
 {
-    return (uint8_t)((raw >> 18) & ((1U << 6) - 1U));   // Cyclic Redundancy Check from bit 18:23 MSB first CRC[5:0], masked with 6 "0" bits
+    if (fault_override) return BMI_OK;
+ 
+    uint8_t chip_id = 0;
+    int8_t rslt = bmi2_get_regs(BMI2_CHIP_ID_ADDR, &chip_id, 1, &dev);
+ 
+    if (rslt != BMI2_OK) {
+        printf("BMI270 fault: SPI read error\n");
+        return BMI_ERR;
+    }
+    if (chip_id != BMI270_CHIP_ID) {
+        printf("BMI270 fault: wrong chip ID 0x%02X (expected 0x%02X)\n",
+               chip_id, BMI270_CHIP_ID);
+        return BMI_ERR;
+    }
+ 
+    uint8_t err_reg = 0;
+    bmi2_get_err_reg_mask(&err_reg, &dev);
+ 
+    if (err_reg & BMI2_FATAL_ERR_MASK) {
+        printf("BMI270 fault: fatal error in ERR_REG\n");
+        return BMI_ERR;
+    }
+ 
+    return BMI_OK;
 }
-

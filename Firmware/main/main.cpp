@@ -1,24 +1,29 @@
 #include "esp32_S3.h"
 #include "DRV.h"
 #include "MT6701.h"
+#include "bmi.h"
 
 // TIMER //
 volatile uint32_t isr_counter = 0;
 
 TaskHandle_t focTaskHandle = NULL;
 TaskHandle_t magTaskHandle = NULL;
+TaskHandle_t bmiTaskHandle = NULL;
 TaskHandle_t drvTaskHandle = NULL;
 TaskHandle_t telemetryTaskHandle = NULL;
 
 // MAIN VARIABLE DECLARATION //
 DRV drv;
 MT6701 mag;
+BMI270 bmi270;
 DRV_data drv_pkg;
 mag_data mag_pkg;
+BMI_data bmi_pkg;
 TelemetryPacket pkg;
 
 SemaphoreHandle_t drv_mutex = NULL;
 SemaphoreHandle_t mag_mutex = NULL;
+SemaphoreHandle_t bmi_mutex = NULL;
 
 // MAIN FUNCTION DECLARATION //
 int initialize();
@@ -27,21 +32,26 @@ void start_control_timer();
 void create_tasks_once();
 void controlISR(void* arg);
 void focLoop(void* arg);
-void magLoop(void* arg);
+void closedLoop(void* arg);
 void drvLoop(void* arg);
 void telemetryLoop(void* arg);
+void bmiLoop(void* arg);
 
 SystemState system_state = SYSTEM_INIT;
 DRV_MotionState motion = MOTION_IDLE;
 bool debug_mode_enabled = true;
+bool included_bmi = false;
+bool included_mag = true;   //Mag or hall
 
 
 extern "C" void app_main(void)
 {
     drv_mutex = xSemaphoreCreateMutex();
     mag_mutex = xSemaphoreCreateMutex();
+    bmi_mutex = xSemaphoreCreateMutex();
     configASSERT(drv_mutex);
     configASSERT(mag_mutex);
+    configASSERT(bmi_mutex);
 
     esp_task_wdt_add(NULL); // Subscribe main to the task watchdog
 
@@ -59,7 +69,8 @@ extern "C" void app_main(void)
                 if (initialize() == 0) {
                     system_state = SYSTEM_CALIBRATION;
                     drv.set_override(true);
-                    mag.set_override(true);
+                    mag.set_override(!included_mag);
+                    bmi270.set_override(!included_bmi);
                 } else {
                     printf("Initialization failed, retrying...\n");
                     vTaskDelay(pdMS_TO_TICKS(200));
@@ -78,7 +89,7 @@ extern "C" void app_main(void)
                     system_state = SYSTEM_RUNNING;
 
                 } else {
-                    printf("\n\nCalibration failed, retrying....\n");
+                    printf("\nCalibration failed, retrying....\n");
                     vTaskDelay(pdMS_TO_TICKS(2000));
                 }
                 break;
@@ -103,13 +114,29 @@ extern "C" void app_main(void)
 }
 
 int initialize() {
+    static bool usb_installed = false;
+    if (!usb_installed) {
+        usb_serial_jtag_driver_config_t usb_cfg = { .tx_buffer_size = 256, .rx_buffer_size = 256 };
+        if (usb_serial_jtag_driver_install(&usb_cfg) == ESP_OK) usb_installed = true;
+    }
+    int status = 0;
+
+    if (drv.init() != DRV_OK) {
+        status |= 2;
+    }
+    vTaskDelay(pdMS_TO_TICKS(50));
+
     mag.init();
-    return drv.init();
+
+    /*if (bmi270.init() != BMI_OK) {
+        status |= 4;
+    }*/
+    return status; 
 }
 
 int calibration() {
     drv.setup_mcpwm();
-    return drv.calibration() + mag.calibration();
+    return drv.calibration() + mag.calibration() /*+ bmi270.calibration()*/;
 }
 
 void start_control_timer()
@@ -145,7 +172,10 @@ void create_tasks_once() {
     static bool tasks_created = false;
     if (!tasks_created) {
         xTaskCreatePinnedToCore(focLoop, "focLoop", 4096, NULL, 12, &focTaskHandle, 1);  //1 and 0 are the core IDs
-        xTaskCreatePinnedToCore(magLoop, "magLoop", 4096, NULL, 11, &magTaskHandle, 0);
+        xTaskCreatePinnedToCore(closedLoop, "closedLoop", 4096, NULL, 11, &magTaskHandle, 0);
+        if (included_bmi){
+            xTaskCreatePinnedToCore(bmiLoop, "bmiLoop", 4096, NULL, 10, &bmiTaskHandle, 0);
+        }
         xTaskCreatePinnedToCore(drvLoop, "drvLoop", 4096, NULL, 10, &drvTaskHandle, 0);
         xTaskCreatePinnedToCore(telemetryLoop, "telemetryLoop", 8192, NULL, 7, &telemetryTaskHandle, 0);
         tasks_created = true;
@@ -190,15 +220,37 @@ void focLoop(void* arg){
     }
 }
 
-void magLoop(void* arg) {
+void closedLoop(void* arg) {
     esp_task_wdt_add(NULL);
-    while (true) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        mag_data temp = mag.getdata();
-        xSemaphoreTake(mag_mutex, portMAX_DELAY);
-            mag_pkg = temp;
-        xSemaphoreGive(mag_mutex);
-        esp_task_wdt_reset();
+    if (included_mag) {
+        while (true) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            mag_data temp = mag.getdata();
+            xSemaphoreTake(mag_mutex, portMAX_DELAY);
+                mag_pkg = temp;
+            xSemaphoreGive(mag_mutex);
+            esp_task_wdt_reset();
+        }
+    }
+    else {
+        vTaskDelete(NULL);          //Future hall implementation
+    }
+}
+
+void bmiLoop(void* arg) {
+    esp_task_wdt_add(NULL);
+    if (included_bmi) {
+        while (true) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            BMI_data temp = bmi270.getdata();
+            xSemaphoreTake(bmi_mutex, portMAX_DELAY);
+                bmi_pkg = temp;
+            xSemaphoreGive(bmi_mutex);
+            esp_task_wdt_reset();
+        }
+    }
+    else {
+        vTaskDelete(NULL);          //Delete task if BMI not included
     }
 }
 
@@ -224,6 +276,7 @@ void telemetryLoop(void* arg) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         DRV_data td;
         mag_data tm;
+        BMI_data tb;
 
         if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
             td = drv_pkg;
@@ -231,6 +284,11 @@ void telemetryLoop(void* arg) {
         } if (xSemaphoreTake(mag_mutex, portMAX_DELAY) == pdTRUE) {
             tm = mag_pkg;
             xSemaphoreGive(mag_mutex);
+        } if (xSemaphoreTake(bmi_mutex, portMAX_DELAY) == pdTRUE) {
+            tb = bmi_pkg;
+            xSemaphoreGive(bmi_mutex);
+        } if (!included_mag) {
+            //tm = hall_pkg;   //Future hall implementation
         }
         float motor_rpm = drv.real_RPM(tm.angle);
 
@@ -252,25 +310,35 @@ void telemetryLoop(void* arg) {
             drv.reducer_angle(tm.angle),
             motor_rpm,
             drv.reducer_RPM(motor_rpm)
+            /*tb.accx,
+            tb.accy,
+            tb.accz,
+            tb.gyrx,
+            tb.gyry,
+            tb.gyrz,
+            tb.ffall*/
         );
 
         if (len > 0) {
             printf("%s", buf);
         }
 
-        char rxbuf[64];
+        uint8_t rxbuf[64] = {0};
+        int rxlen = usb_serial_jtag_read_bytes(rxbuf, sizeof(rxbuf) - 1, 0);
 
-        if (fgets(rxbuf, sizeof(rxbuf), stdin) != NULL) {
+        if (rxlen > 0) {
+            rxbuf[rxlen] = '\0';
+            rxbuf[strcspn((char*)rxbuf, "\r\n")] = '\0';
 
-            char* cmd = strchr(rxbuf, ':');
+            char* cmd = strchr((char*)rxbuf, ':');
             if (cmd != NULL) {
                 cmd++;
-
-                if (strcmp(cmd, "IDLE") == 0) motion = MOTION_IDLE;
+                if      (strcmp(cmd, "IDLE")  == 0) motion = MOTION_IDLE;
                 else if (strcmp(cmd, "ALIGN") == 0) motion = MOTION_ALIGNING;
-                else if (strcmp(cmd, "RUN") == 0) motion = MOTION_RAMPING;
+                else if (strcmp(cmd, "RUN")   == 0) motion = MOTION_RAMPING;
                 else if (strcmp(cmd, "BRAKE") == 0) motion = MOTION_RAMPING_DOWN;
-                else if (strcmp(cmd, "STOP") == 0) gpio_set_level(EN_DRV, 0);
+                else if (strcmp(cmd, "STOP")  == 0) gpio_set_level(EN_DRV, 0);
+                printf("CMD: %s\n", cmd);
             }
         }
     }

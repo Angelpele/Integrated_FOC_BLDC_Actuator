@@ -98,11 +98,12 @@ class SerialWorker(QThread):
         self.port = port
         self.baud = baud
         self._running = True
+        self.ser= None
 
     def run(self):
         try:
-            ser = serial.Serial(self.port, self.baud, timeout=0.1)
-            ser.reset_input_buffer()
+            self.ser = serial.Serial(self.port, self.baud, timeout=0.1)
+            self.ser.reset_input_buffer()
         except Exception as e:
             self.fatal.emit(f"Cannot open {self.port}: {e}")
             return
@@ -112,7 +113,7 @@ class SerialWorker(QThread):
 
         while self._running:
             try:
-                chunk = ser.read(ser.in_waiting or 1)
+                chunk = self.ser.read(self.ser.in_waiting or 1)
                 if not chunk:
                     continue
 
@@ -163,13 +164,20 @@ class SerialWorker(QThread):
                     break
 
         try:
-            ser.close()
+            self.ser.close()
         except Exception:
             pass
 
     def stop(self):
         self._running = False
         self.wait()
+
+    def write_data(self, data):
+        if self.ser and self.ser.is_open:
+            try:
+                self.ser.write(data.encode('utf-8'))
+            except Exception as e:
+                self.error.emit(f"Write failed: {e}")
 
 # ─────────────────────────────────────────────────────────────
 #  METRIC CARD
@@ -253,15 +261,16 @@ class MotorMonitor(QMainWindow):
         tabs = QTabWidget()
         tabs.setDocumentMode(True)
         tabs.addTab(self._tab_dashboard(),  "  Dashboard  ")
+        tabs.addTab(self._tab_control(),    "  Control  ")
+        #tabs.addTab(self._tab_gyro(), "  Gyro - Accel  ")
         tabs.addTab(self._tab_currents(),   "  Currents  ")
         tabs.addTab(self._tab_mechanical(), "  Mechanical  ")
         tabs.addTab(self._tab_power(),      "  Power & NTC  ")
         tabs.addTab(self._tab_console(),    "  Raw Console  ")
-        tabs.addTab(self._tab_control(),    "  Control  ")
         root.addWidget(tabs)
 
         self.status = QStatusBar()
-        self.setStatusBar(self.status)
+        self.setStatusBar(self.status) 
         self._status("No Connection", "warn")
 
     def _build_toolbar(self):
@@ -342,6 +351,7 @@ class MotorMonitor(QMainWindow):
         self.lbl_id     = QLabel("ID: —")
         self.lbl_nfault = QLabel("NFault: —")
         self.lbl_noctw  = QLabel("OC Warn: —")
+        #self.lbl_ffall   = QLabel("Free Fall: —")
         self.lbl_ang    = QLabel("Motor Angle: —°")
         self.lbl_redang = QLabel("Reducer Angle: —°")
         for l in [self.lbl_id, self.lbl_nfault, self.lbl_noctw, self.lbl_ang, self.lbl_redang]:
@@ -376,6 +386,19 @@ class MotorMonitor(QMainWindow):
         pw2.addLegend(); self.crv_ang[0].setData(name="Motor angle")
         v.addWidget(pw1); v.addWidget(pw2)
         return w
+    
+    # def _tab_gyro(self):
+    #     # Commented out to disable gyro/accel tab
+    #     w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(16, 16, 16, 16)
+    #     pw1, self.crv_acc = make_plot("Acceleration", "G", ['#ff4d6d','#ffb347','#4e9fff'])
+    #     pw1.addLegend()
+    #     self.crv_acc[0].setData(name="Acc X"); self.crv_acc[1].setData(name="Acc Y"); self.crv_acc[2].setData(name="Acc Z")
+    #     pw2, self.crv_gyr = make_plot("Gyroscope", "dps", ['#ff4d6d','#ffb347','#4e9fff'])
+    #     pw2.addLegend()
+    #     self.crv_gyr[0].setData(name="Gyr X"); self.crv_gyr[1].setData(name="Gyr Y"); self.crv_gyr[2].setData(name="Gyr Z")
+    #     v.addWidget(pw1); v.addWidget(pw2)
+    #     return w
+
 
     def _tab_power(self):
         w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(16, 16, 16, 16)
@@ -423,13 +446,13 @@ class MotorMonitor(QMainWindow):
 
         grp_cmd = QGroupBox("Commands (sends via UART)"); gc = QGridLayout(grp_cmd); gc.setSpacing(10)
         btn_idle  = QPushButton("⏸  IDLE");   btn_align = QPushButton("⚙  Align")
-        btn_run   = QPushButton("▶  Start Up"); btn_stop = QPushButton("⏹  Stop Ramp")
-        self.btn_brake_ctrl = QPushButton("🛑  Brake"); self.btn_brake_ctrl.setObjectName("btn_brake")
+        btn_run   = QPushButton("▶  RUN"); btn_stop = QPushButton("⏹  Brake")
+        self.btn_brake_ctrl = QPushButton("🛑  STOP"); self.btn_brake_ctrl.setObjectName("btn_brake")
         for btn, cmd in [(btn_idle,"CMD:IDLE\n"),(btn_align,"CMD:ALIGN\n"),
-                         (btn_run,"CMD:RUN\n"),(btn_stop,"CMD:STOP\n")]:
+                         (btn_run,"CMD:RUN\n"),(btn_stop,"CMD:BRAKE\n")]:
             btn.clicked.connect(lambda _, c=cmd: self._send_serial(c))
         state_str = cmd.strip().split(':')[1]
-        self.btn_brake_ctrl.clicked.connect(lambda: self._send_serial("CMD:BRAKE\n"))
+        self.btn_brake_ctrl.clicked.connect(lambda: self._send_serial("CMD:STOP\n"))
         gc.addWidget(btn_idle, 0,0); gc.addWidget(btn_align, 0,1)
         gc.addWidget(btn_run,  0,2); gc.addWidget(btn_stop,  0,3)
         gc.addWidget(self.btn_brake_ctrl, 1, 0, 1, 4)
@@ -482,13 +505,14 @@ class MotorMonitor(QMainWindow):
 
     def _send_serial(self, cmd):
         if self.worker and self.worker.isRunning():
+            self.worker.write_data(cmd)
             self._status(f"TX → {cmd.strip()}", "ok")
         else:
             self._status("No active connection", "warn")
 
     def _send_manual(self):
         txt = self.tx_edit.text().strip()
-        if txt: self._send_serial(txt + "\n"); self.tx_edit.clear()
+        if txt: self._send_serial(txt + "\n");self.tx_edit.clear()
 
     # ── DATA ─────────────────────────────────────────────────
     def _on_data(self, d):
@@ -510,6 +534,8 @@ class MotorMonitor(QMainWindow):
         self.lbl_nfault.setStyleSheet(f"color:{'#00d4aa' if nf_ok else '#ff4d6d'}; font-family:'Consoles'; padding:4px 12px;")
         self.lbl_noctw.setText(f"OC Warn: {'OK' if oc_ok else 'WARN'}")
         self.lbl_noctw.setStyleSheet(f"color:{'#00d4aa' if oc_ok else '#ffb347'}; font-family:'Consoles'; padding:4px 12px;")
+        #self.lbl_ffall.setText(f"Free Fall: {'YES' if d['ffall'] == 1 else 'NO'}")
+        #self.lbl_ffall.setStyleSheet(f"color:{'#ff4d6d' if d['ffall'] == 1 else '#00d4aa'}; font-family:'Consoles'; padding:4px 12px;")
         self.lbl_ang.setText(f"Motor angle: {d['m_ang']:.2f}°")
         self.lbl_redang.setText(f"Reducer angle: {d['red_ang']:.2f}°")
 
@@ -523,7 +549,7 @@ class MotorMonitor(QMainWindow):
             self.rec_writer.writerow([datetime.utcnow().isoformat(),
                 d['pvdd'], d['i1'], d['i2'], d['i3'], d['a_raw'], d['b_raw'], d['c_raw'],
                 d['nfault'], d['noctw'], d['ntc'], d['m_ang'], d['red_ang'],
-                d['m_rpm'], d['red_rpm'], d['state']])
+                d['m_rpm'], d['red_rpm']])
 
     def _on_raw(self, line):
         if self.chk_raw.isChecked():
@@ -558,6 +584,7 @@ class MotorMonitor(QMainWindow):
         self.crv_pvdd[0].setData(self.x, arr['pvdd'])
         self.crv_ntc[0].setData(self.x, arr['ntc'])
 
+
     # ── CSV ──────────────────────────────────────────────────
     def _toggle_record(self):
         if not self.recording:
@@ -567,7 +594,7 @@ class MotorMonitor(QMainWindow):
             self.rec_file   = open(path, 'w', newline='')
             self.rec_writer = csv.writer(self.rec_file)
             self.rec_writer.writerow(['timestamp','pvdd','i1','i2','i3',
-                'a_raw','b_raw','c_raw','nfault','noctw','ntc','m_ang','red_ang','m_rpm','red_rpm','state'])
+                'a_raw','b_raw','c_raw','nfault','noctw','ntc','m_ang','red_ang','m_rpm','red_rpm','accx','accy','accz','gyrx','gyry','gyrz','state'])
             self.recording = True
             self.btn_record.setText("⏹  Stop Recording")
             self._status(f"Recording → {path}", "ok")
@@ -592,6 +619,7 @@ class MotorMonitor(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setApplicationName("ASTURION GUI Monitor")
+    app.setWindowIcon(QIcon("Flag_of_Asturias.svg.png"))
     win = MotorMonitor()
     win.show()
     sys.exit(app.exec())

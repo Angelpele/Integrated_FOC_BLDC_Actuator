@@ -10,10 +10,10 @@
 
 enum DRV_Error {
     DRV_OK = 0,
-    DRV_OVERVOLTAGE = 1,
-    DRV_FAULT = 2,
-    DRV_WARNING = 3,
-    DRV_LATCHED = 4
+    DRV_OVERVOLTAGE = -1,
+    DRV_FAULT = -2,
+    DRV_WARNING = -3,
+    DRV_LATCHED = -4
 };
 
 enum DRV_MotionState {
@@ -47,10 +47,8 @@ class DRV {
         int init();
         int calibration();
         DRV_data getdata();
-        void printdata(DRV_data);
         int fault_detection();
 
-        void pwm_init();
         float real_RPM(float angle_deg);
         float reducer_angle(float motor_angle);
         void setup_mcpwm();
@@ -95,7 +93,7 @@ class DRV {
         // DRV parameters
         float R_shunt = 0.01;
         float voltage_step = 3.3/4095;
-        float overvoltage = 18;
+        float overvoltage = 16;
         uint16_t SO1_offset = 2048; // Default to mid-range (1.65V)
         uint16_t SO2_offset = 2048;
 
@@ -153,7 +151,7 @@ class DRV {
         float   rpm_filtered    = 0.0f;
         
 
-        static constexpr float RPM_LPF      = 0.10f; 
+        static constexpr float RPM_LPF      = 0.20f; 
         static constexpr float RPM_UNWRAP_THR     = 180.0f;
         static constexpr int64_t RPM_MIN_DT_US    = 100;    // guard against /0 on first call
         

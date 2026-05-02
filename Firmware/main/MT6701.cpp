@@ -25,7 +25,7 @@ MT6701_Status MT6701::calibration()
     int8_t error = 0;
     gpio_set_level(MAG_CSN, 0);
     esp_rom_delay_us(1);
-    printf("Calibrating Magnetic Encoder...");
+    printf("Calibrating Magnetic Encoder...\n");
     for(int i=0; i<1000;i++)
     {
         data = SSI_read_raw();
@@ -44,6 +44,7 @@ MT6701_Status MT6701::calibration()
     esp_rom_delay_us(Delay_MAG);
     gpio_set_level(MAG_CSN, 1);
     offset = ((float)sum / 1000.0f) / COUNTS_PER_REV * 360.0f;
+    printf("Calibration Mag OK. Offset: %.2f deg\n", offset);
     return MT6701_OK;
 }
 
