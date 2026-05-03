@@ -16,14 +16,6 @@ enum DRV_Error {
     DRV_LATCHED = -4
 };
 
-enum DRV_MotionState {
-    MOTION_IDLE,
-    MOTION_ALIGNING,
-    MOTION_RAMPING,
-    MOTION_SPINNING,
-    MOTION_RAMPING_DOWN
-};
-
 struct AlignOffset {
     bool  done;
     float elec_offset;
@@ -33,9 +25,9 @@ typedef struct {
     float PVDD;
     float current1;
     float current2;
-    uint16_t A_raw;
-    uint16_t B_raw;
-    uint16_t C_raw;
+    uint16_t A;
+    uint16_t B;
+    uint16_t C;
     uint8_t NFAULT_raw;
     uint8_t NOCTW_raw;
     float temperature;
@@ -48,14 +40,16 @@ class DRV {
         int calibration();
         DRV_data getdata();
         int fault_detection();
+        float get_currents_angle();
 
         float real_RPM(float angle_deg);
         float reducer_angle(float motor_angle);
         void setup_mcpwm();
         AlignOffset align(float angle);
-        bool ramp(float angle, float init_freq, float obj_freq, float duration_s);
-        bool spin(float angle, float freq, float duration_s);
+        bool ramp(float angle, float init_freq, float obj_freq);
+        bool closed_spin(float angle, float freq);
         bool svpwm(float angle, float freq);
+        bool run_openloop_bemf(float target_freq, float duty);
         void brake();
         void idle();
         void test_working_trans();
@@ -77,10 +71,20 @@ class DRV {
             gpio_set_level(MOC, state ? 1 : 0);
         }
 
-        float reducer_RPM(float motor_RPM){
-            return motor_RPM / reducer_ratio;
+        void set_spin_duration(float duration_s){ spin_duration = duration_s; }
+        void reset_spin_timer() {
+            spin_timer_started = false;
+            spin_elapsed = 0.0f;
+            theta_reset = true;
+            phase_accumulator = 0.0f;     
+            electrical_freq = 2.0f;        
         }
+        void set_ramp_duration(float duration_s){ ramp_duration = duration_s; }
 
+        float reducer_RPM(float motor_RPM){ return motor_RPM / reducer_ratio; }
+
+        void set_closed_loop_lpf(float alpha){ CLOSED_LOOP_LPF = alpha; }
+        void set_rpm_lpf(float alpha){ RPM_LPF = alpha; }
 
     private: 
         // DRV data
@@ -99,12 +103,15 @@ class DRV {
 
         // Motor parameters (5010 750KV)
         static constexpr int MOTOR_POLE_PAIRS = 7;   // 14 poles
-        static constexpr int MOTOR_RESISTANCE = 270; // mOhm
+        static constexpr float MOTOR_RESISTANCE = 0.270f; // Ohms
         static constexpr int MOTOR_MAX_CURRENT = 40; // Amps
         static constexpr float reducer_ratio = 15.0f; // Reducer ratio
 
         // DRV current sensing
         float current_gain = 40.0; 
+
+        //Voltage sensing
+        float voltage_gain = 11.0f; // 100k + 10k / 10k
 
         // External sensors data
         int NTC_raw = 0;
@@ -120,7 +127,7 @@ class DRV {
         bool aligned = false;
         float offset = 0.0;
         float align_time = 0.0;
-        float ALIGN_DURATION = 1.5f;   // 1500 ms
+        float ALIGN_DURATION = 1f;   // 1000 ms
         float ALIGN_DUTY = 15.0f;
 
         // Waveform generation
@@ -129,16 +136,20 @@ class DRV {
         float modulation_index = 1; // Amplitude (0.0 to 1.0) if higher -> overmodulation
         float electrical_freq = 2; // Motor Frequency (Hz), speed of the rotating field, higher than 0.5 to avoid deadzone
         float elec_offset = 0.0f; 
+        float theta_reset = true;
 
         // Ramping control
-        float ramp_rate = 100.0f; // How fast to change frequency (Hz/s)
+        float ramp_rate = 50.0f; // How fast to change frequency (Hz/s)
         float ramp_active = false;
         float ramp_target_freq = 0.0f;
-        float ramp_duration = 0.2f;
+        float ramp_duration = .5f;
         float dt = 0.000050f; // Elapsed time (assuming 50us)
 
         // Spinning control
         float spin_elapsed = 0.0f;
+        float spin_duration = 0.0f;
+        float spin_start_time = 0.0f;
+        bool spin_timer_started = false;
 
         // Reducer angle
         float last_angle = 0.0f;
@@ -150,8 +161,8 @@ class DRV {
         int64_t rpm_last_time   = 0;
         float   rpm_filtered    = 0.0f;
         
-
-        static constexpr float RPM_LPF      = 0.20f; 
+        float CLOSED_LOOP_LPF = 0.15f;
+        float RPM_LPF      = 0.70f; 
         static constexpr float RPM_UNWRAP_THR     = 180.0f;
         static constexpr int64_t RPM_MIN_DT_US    = 100;    // guard against /0 on first call
         

@@ -102,7 +102,7 @@ mag_data MT6701::getdata()
     package.angle = angle;
 
     uint8_t mg = SSI_get_mag_status(data);
-    package.push = (mg >> 0) & 0x01;             // Active HIGH, shift 2 bits to the right and mask
+    //package.push = (mg >> 0) & 0x01;             // Active HIGH, shift 2 bits to the right and mask
     package.status = (mg >> 1) & 0x01;           // If 1, loss of track
     
     return package;

@@ -89,6 +89,27 @@ enum SystemState {
     SYSTEM_RUNNING,
 };
 
+enum ControlSys{
+    MAG,
+    HALL,
+    FOC
+};
+
+enum DRV_MotionState {
+    MOTION_IDLE,
+    MOTION_ALIGNING,
+    MOTION_RAMPING,
+    MOTION_SPINNING,
+    MOTION_RAMPING_DOWN
+};
+
+enum ControlMode {
+    MODE_OPENLOOP_BEMF,
+    MODE_CLOSED_LOOP,
+    MODE_SVPWM,
+    MODE_TRAPEZOIDAL
+};
+
 #pragma pack(push, 1)
 typedef struct {
     uint8_t ID;
@@ -119,13 +140,29 @@ typedef struct {
 } TelemetryPacket;
 #pragma pack(pop)
 
+typedef struct {
+    float angle;
+    uint8_t status;
+} angle_data;
 
 //Timer 1MHz
-#define TIMER_DIVIDER 80          // 80 MHz / 80 = 1 MHz timer
+/*/
+#define TIMER_DIVIDER 40          // 40 MHz / 80 = 0.5 MHz timer
+#define TIMER_INTERVAL_US 25      // 25 µs → 40 kHz
+
+#define FOC_DIVIDER        1    //40khz (max 200 khz)
+#define FBK_DIVIDER        40    //10khz
+#define BMI_DIVIDER        40   //1khz
+#define DRV_DIVIDER        80   //500Hz  
+#define TELEMETRY_DIVIDER  2000  // 20hz*/
+
+
+//Prior
+#define TIMER_DIVIDER 80          // 40 MHz / 80 = 0.5 MHz timer
 #define TIMER_INTERVAL_US 50      // 50 µs → 20 kHz
 
 #define FOC_DIVIDER        1    //20khz (max 200 khz)
-#define MAG_DIVIDER        4    //5khz
+#define FBK_DIVIDER        4    //5khz
 #define BMI_DIVIDER        20   //1khz
 #define DRV_DIVIDER        40   //500Hz  
 #define TELEMETRY_DIVIDER  1000  // 20hz

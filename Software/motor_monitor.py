@@ -77,7 +77,7 @@ QCheckBox::indicator:checked { background: #00d4aa; border-color: #00d4aa; }
 """
 
 # CSV format from firmware:
-# ID,pvdd,i1,i2,i3,a_raw,b_raw,c_raw,nfault,noctw,ntc,m_ang,red_ang,m_rpm,red_rpm,state
+# ID,pvdd,i1,i2,i3,a,b,c,nfault,noctw,ntc,m_ang,red_ang,m_rpm,red_rpm,state
 # e.g.: 1,14.121,0.014,0.010,-0.024,27.12,0.000,0.000,0.00,0.00,0,0,0,1,1,0
 
 STATE_NAMES = {0:"IDLE", 1:"ALIGNING", 2:"RAMPING", 3:"SPINNING", 4:"RAMP_DOWN", 5:"BRAKING"}
@@ -137,9 +137,9 @@ class SerialWorker(QThread):
                                 'i1':      float(parts[2]),
                                 'i2':      float(parts[3]),
                                 'i3':      float(parts[4]),
-                                'a_raw':   float(parts[5]),
-                                'b_raw':   float(parts[6]),
-                                'c_raw':   float(parts[7]),
+                                'a':   float(parts[5]),
+                                'b':   float(parts[6]),
+                                'c':   float(parts[7]),
                                 'nfault':  int(parts[8]),
                                 'noctw':   int(parts[9]),
                                 'ntc':     float(parts[10]),
@@ -240,7 +240,7 @@ class MotorMonitor(QMainWindow):
 
         N = PLOT_LEN
         self.buf = {k: collections.deque([0.0]*N, maxlen=N) for k in
-                    ['pvdd','i1','i2','i3','m_rpm','red_rpm','ntc','m_ang','a_raw','b_raw','c_raw']}
+                    ['pvdd','i1','i2','i3','m_rpm','red_rpm','ntc','m_ang','a','b','c']}
         self.x = np.arange(N)
 
         self._build_ui()
@@ -265,7 +265,7 @@ class MotorMonitor(QMainWindow):
         #tabs.addTab(self._tab_gyro(), "  Gyro - Accel  ")
         tabs.addTab(self._tab_currents(),   "  Currents  ")
         tabs.addTab(self._tab_mechanical(), "  Mechanical  ")
-        tabs.addTab(self._tab_power(),      "  Power & NTC  ")
+        tabs.addTab(self._tab_power(),      "  Power - NTC  ")
         tabs.addTab(self._tab_console(),    "  Raw Console  ")
         root.addWidget(tabs)
 
@@ -371,9 +371,9 @@ class MotorMonitor(QMainWindow):
         pw1, self.crv_cur = make_plot("Phase Currents", "Amps", ['#ff4d6d','#ffb347','#4e9fff'])
         pw1.addLegend()
         self.crv_cur[0].setData(name="I1"); self.crv_cur[1].setData(name="I2"); self.crv_cur[2].setData(name="I3")
-        pw2, self.crv_raw = make_plot("ADC phases (A, B, C)", "Raw", ['#ff4d6d','#4e9fff','#00d4aa'])
+        pw2, self.crv_raw = make_plot("ADC phases (A, B, C)", "Volts", ['#ff4d6d','#4e9fff','#00d4aa'])
         pw2.addLegend()
-        self.crv_raw[0].setData(name="A_raw"); self.crv_raw[1].setData(name="B_raw"); self.crv_raw[2].setData(name="C_raw")
+        self.crv_raw[0].setData(name="A"); self.crv_raw[1].setData(name="B"); self.crv_raw[2].setData(name="C")
         v.addWidget(pw1); v.addWidget(pw2)
         return w
 
@@ -427,44 +427,204 @@ class MotorMonitor(QMainWindow):
         return w
 
     def _tab_control(self):
-        from PyQt6.QtWidgets import QLineEdit
+        from PyQt6.QtWidgets import QWidget, QVBoxLayout, QGroupBox, QGridLayout, QLabel, QComboBox, QPushButton, QLineEdit, QHBoxLayout
         w = QWidget(); v = QVBoxLayout(w)
         v.setContentsMargins(24, 24, 24, 24); v.setSpacing(16)
 
+        # --- Motor State Group ---
         grp_state = QGroupBox("Motor state"); gs = QGridLayout(grp_state)
         self.lbl_ctrl_state  = QLabel("—"); self.lbl_ctrl_rpm   = QLabel("—")
         self.lbl_ctrl_pvdd   = QLabel("—"); self.lbl_ctrl_nfault = QLabel("—")
         self.lbl_ctrl_id     = QLabel("—")
-        for i, (name, lbl) in enumerate([("State:", self.lbl_ctrl_state),
-                                          ("Motor RPM:", self.lbl_ctrl_rpm),
-                                          ("PVDD:", self.lbl_ctrl_pvdd),
-                                          ("NFAULT:", self.lbl_ctrl_nfault),
-                                          ("Motor ID:", self.lbl_ctrl_id)]):
+        
+        state_items = [
+            ("State:", self.lbl_ctrl_state), ("Motor RPM:", self.lbl_ctrl_rpm),
+            ("PVDD:", self.lbl_ctrl_pvdd), ("NFAULT:", self.lbl_ctrl_nfault),
+            ("Motor ID:", self.lbl_ctrl_id)
+        ]
+        
+        for i, (name, lbl) in enumerate(state_items):
             gs.addWidget(QLabel(name), i // 2, (i % 2) * 2)
             gs.addWidget(lbl,          i // 2, (i % 2) * 2 + 1)
         v.addWidget(grp_state)
 
+        # --- Commands Group ---
         grp_cmd = QGroupBox("Commands (sends via UART)"); gc = QGridLayout(grp_cmd); gc.setSpacing(10)
-        btn_idle  = QPushButton("⏸  IDLE");   btn_align = QPushButton("⚙  Align")
-        btn_run   = QPushButton("▶  RUN"); btn_stop = QPushButton("⏹  Brake")
-        self.btn_brake_ctrl = QPushButton("🛑  STOP"); self.btn_brake_ctrl.setObjectName("btn_brake")
-        for btn, cmd in [(btn_idle,"CMD:IDLE\n"),(btn_align,"CMD:ALIGN\n"),
-                         (btn_run,"CMD:RUN\n"),(btn_stop,"CMD:BRAKE\n")]:
-            btn.clicked.connect(lambda _, c=cmd: self._send_serial(c))
-        state_str = cmd.strip().split(':')[1]
+        
+        # Define columns stretch to ensure 1/4 width for each of the 4 columns
+        gc.setColumnStretch(0, 1) # Column for IDLE
+        gc.setColumnStretch(1, 1) # Column for ALIGN
+        gc.setColumnStretch(2, 1) # Column for RUN + TEXT
+        gc.setColumnStretch(3, 1) # Column for BRAKE
+
+        btn_idle  = QPushButton("⏸  IDLE")
+        btn_align = QPushButton("⚙  Align")
+        btn_stop  = QPushButton("⏹  Brake")
+        
+        # Setup Run Button + Input group (This group will occupy the 3rd 1/4)
+        self.btn_run = QPushButton("▶  RUN")
+        self.run_input = QLineEdit()
+        self.run_input.setPlaceholderText("Freq")
+        self.run_input.setText("30")
+        self.run_input.setMinimumWidth(40) # Ensure it's not too squished
+
+        run_layout = QHBoxLayout()
+        run_layout.setSpacing(2)
+        run_layout.setContentsMargins(0, 0, 0, 0) 
+        run_layout.addWidget(self.btn_run, stretch=2) # Button gets more of the 1/4 space
+        run_layout.addWidget(self.run_input, stretch=1) # Text gets less of the 1/4 space
+
+        # Command Mapping
+        cmd_map = [(btn_idle, "CMD:IDLE\n"), (btn_align, "CMD:ALIGN\n"),
+                   (self.btn_run, "CMD:RUN"), (btn_stop, "CMD:BRAKE\n")]
+
+        for btn, cmd in cmd_map:
+            if cmd == "CMD:RUN":
+                btn.clicked.connect(self._handle_run_command)
+            else:
+                btn.clicked.connect(lambda _, c=cmd: self._send_serial(c))
+
+        # Dropdown and Stop logic
+        self.cb_fbk = QComboBox()
+        self.cb_fbk.addItems(["MAG ENCODER", "HALL SENSOR", "FOC ANGLE"])
+        self.cb_fbk.currentTextChanged.connect(lambda m: self._send_serial(f"CMD:FBK:{m.upper().replace(' ','_')}\n"))
+
+        self.cb_control_mode = QComboBox()
+        self.cb_control_mode.addItems(["OPENLOOP_BEMF", "CLOSED_LOOP", "SVPWM", "TRAPEZOIDAL"])
+        self.cb_control_mode.currentTextChanged.connect(lambda m: self._send_serial(f"CMD:CTRL:{m.upper().replace(' ','_')}\n"))
+
+        self.btn_brake_ctrl = QPushButton("🛑  STOP")
+        self.btn_brake_ctrl.setObjectName("btn_brake")
         self.btn_brake_ctrl.clicked.connect(lambda: self._send_serial("CMD:STOP\n"))
-        gc.addWidget(btn_idle, 0,0); gc.addWidget(btn_align, 0,1)
-        gc.addWidget(btn_run,  0,2); gc.addWidget(btn_stop,  0,3)
-        gc.addWidget(self.btn_brake_ctrl, 1, 0, 1, 4)
+
+        # --- Organize Grid (gc) ---
+        gc.addWidget(btn_idle, 0, 0)
+        gc.addWidget(btn_align, 0, 1)
+        gc.addLayout(run_layout, 0, 2) 
+        gc.addWidget(btn_stop, 0, 3)
+
+        # Feedback row spans all 4 columns for clean look
+        gc.addWidget(QLabel("Feedback Method:"), 1, 0)
+        gc.addWidget(self.cb_fbk, 1, 1, 1, 1) 
+
+        gc.addWidget(QLabel("Control Mode:"), 1, 2)
+        gc.addWidget(self.cb_control_mode, 1, 3, 1, 1)
+
+        # Large Stop button spans all 4 columns
+        gc.addWidget(self.btn_brake_ctrl, 2, 0, 1, 4)
         v.addWidget(grp_cmd)
 
+        # --- Free Text Group ---
         grp_tx = QGroupBox("Send free text"); gt = QHBoxLayout(grp_tx)
         self.tx_edit = QLineEdit(); self.tx_edit.setPlaceholderText("Write command and press Enter…")
         self.tx_edit.returnPressed.connect(self._send_manual)
         btn_send = QPushButton("Send"); btn_send.clicked.connect(self._send_manual)
         gt.addWidget(self.tx_edit); gt.addWidget(btn_send)
-        v.addWidget(grp_tx); v.addStretch()
+        
+        v.addWidget(grp_tx); 
+
+            # --- Alpha Slider Group ---
+        grp_alpha = QGroupBox("Change parameter"); ga = QVBoxLayout(grp_alpha); ga.setSpacing(6)
+
+        # Top row: label name input + value display
+        alpha_top = QHBoxLayout()
+        alpha_lbl = QLabel("Parameter name:")
+        alpha_lbl.setStyleSheet("color:#7a8399; font-size:11px;")
+        self.alpha_name = QLineEdit()
+        self.alpha_name.setText("alpha")
+        self.alpha_name.setFixedWidth(100)
+        self.alpha_name.setStyleSheet("background:#161b27; border:1px solid #2a3348; border-radius:4px; padding:3px 8px; color:#c8cdd8;")
+
+        self.alpha_min_input = QLineEdit(); self.alpha_min_input.setText("0")
+        self.alpha_min_input.setFixedWidth(55)
+        self.alpha_min_input.setStyleSheet("background:#161b27; border:1px solid #2a3348; border-radius:4px; padding:3px 6px; color:#c8cdd8;")
+        self.alpha_max_input = QLineEdit(); self.alpha_max_input.setText("100")
+        self.alpha_max_input.setFixedWidth(55)
+        self.alpha_max_input.setStyleSheet("background:#161b27; border:1px solid #2a3348; border-radius:4px; padding:3px 6px; color:#c8cdd8;")
+
+        self.alpha_val_lbl = QLabel("0")
+        self.alpha_val_lbl.setFixedWidth(50)
+        self.alpha_val_lbl.setStyleSheet("color:#00d4aa; font-size:15px; font-weight:700; font-family:'Consoles';")
+        self.alpha_val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        alpha_top.addWidget(alpha_lbl)
+        alpha_top.addWidget(self.alpha_name)
+        alpha_top.addSpacing(16)
+        alpha_top.addWidget(QLabel("Min:")); alpha_top.addWidget(self.alpha_min_input)
+        alpha_top.addSpacing(8)
+        alpha_top.addWidget(QLabel("Max:")); alpha_top.addWidget(self.alpha_max_input)
+        alpha_top.addStretch()
+        alpha_top.addWidget(QLabel("Value:")); alpha_top.addWidget(self.alpha_val_lbl)
+        ga.addLayout(alpha_top)
+
+        # Slider — full width
+        self.alpha_slider = QSlider(Qt.Orientation.Horizontal)
+        self.alpha_slider.setMinimum(0)
+        self.alpha_slider.setMaximum(1000)   # internal resolution 0–1000 for smooth float mapping
+        self.alpha_slider.setValue(0)
+        self.alpha_slider.setStyleSheet("""
+            QSlider::groove:horizontal {
+                height: 6px; background: #1f2535; border-radius: 3px;
+            }
+            QSlider::handle:horizontal {
+                background: #00d4aa; border: none;
+                width: 16px; height: 16px; margin: -5px 0; border-radius: 8px;
+            }
+            QSlider::sub-page:horizontal { background: #00d4aa; border-radius: 3px; }
+        """)
+        ga.addWidget(self.alpha_slider)
+
+        # Send button row
+        alpha_btn_row = QHBoxLayout()
+        self.alpha_send_btn = QPushButton("Send")
+        self.alpha_send_btn.setFixedWidth(80)
+        self.alpha_live_chk = QPushButton("Live  ○")
+        self.alpha_live_chk.setCheckable(True)
+        self.alpha_live_chk.setFixedWidth(80)
+        self.alpha_live_chk.setStyleSheet("""
+            QPushButton { background:#1a2030; color:#c8cdd8; border:1px solid #2a3348; border-radius:6px; padding:5px; }
+            QPushButton:checked { background:#0d3d2e; color:#00d4aa; border-color:#00d4aa44; }
+        """)
+        self.alpha_live_chk.toggled.connect(lambda on: self.alpha_live_chk.setText("Live  ●" if on else "Live  ○"))
+        alpha_btn_row.addStretch()
+        alpha_btn_row.addWidget(self.alpha_live_chk)
+        alpha_btn_row.addWidget(self.alpha_send_btn)
+        ga.addLayout(alpha_btn_row)
+
+        v.addWidget(grp_alpha)
+
+        # --- Slider logic ---
+        def _alpha_value():
+            try:
+                mn = float(self.alpha_min_input.text())
+                mx = float(self.alpha_max_input.text())
+            except ValueError:
+                mn, mx = 0.0, 1.0
+            return mn + (self.alpha_slider.value() / 1000.0) * (mx - mn)
+
+        def _on_slider_moved():
+            val = _alpha_value()
+            # Format as int if whole number, else 2 decimal places
+            self.alpha_val_lbl.setText(f"{val:.0f}" if val == int(val) else f"{val:.2f}")
+            if self.alpha_live_chk.isChecked():
+                _send_alpha()
+
+        def _send_alpha():
+            val = _alpha_value()
+            name = self.alpha_name.text().strip() or "alpha"
+            fmt = f"{val:.0f}" if val == int(val) else f"{val:.2f}"
+            self._send_serial(f"CMD:{name.upper()}:{fmt}\n")
+
+        self.alpha_slider.valueChanged.connect(_on_slider_moved)
+        self.alpha_send_btn.clicked.connect(_send_alpha)
+        # Update display when min/max change
+        self.alpha_min_input.textChanged.connect(lambda _: _on_slider_moved())
+        self.alpha_max_input.textChanged.connect(lambda _: _on_slider_moved())
+
+        v.addStretch()
         return w
+
+
     # ── SERIAL ───────────────────────────────────────────────
     def _refresh_ports(self):
         self.cb_port.clear()
@@ -473,6 +633,15 @@ class MotorMonitor(QMainWindow):
             self.cb_port.addItem(f"{p.device}  —  {p.description[:40]}", p.device)
         if not ports:
             self.cb_port.addItem("(No ports detected)", "")
+    
+    def _handle_run_command(self):
+        val = self.run_input.text().strip()
+        if val:
+            # Sends as "CMD:RUN:30\n"
+            self._send_serial(f"CMD:RUN:{val}\n")
+        else:
+            # Fallback to standard RUN if empty
+            self._send_serial("CMD:RUN\n")
 
     def _connect(self):
         port = self.cb_port.currentData()
@@ -547,7 +716,7 @@ class MotorMonitor(QMainWindow):
 
         if self.recording and self.rec_writer:
             self.rec_writer.writerow([datetime.utcnow().isoformat(),
-                d['pvdd'], d['i1'], d['i2'], d['i3'], d['a_raw'], d['b_raw'], d['c_raw'],
+                d['pvdd'], d['i1'], d['i2'], d['i3'], d['a'], d['b'], d['c'],
                 d['nfault'], d['noctw'], d['ntc'], d['m_ang'], d['red_ang'],
                 d['m_rpm'], d['red_rpm']])
 
@@ -575,9 +744,9 @@ class MotorMonitor(QMainWindow):
         self.crv_cur[0].setData(self.x, arr['i1'])
         self.crv_cur[1].setData(self.x, arr['i2'])
         self.crv_cur[2].setData(self.x, arr['i3'])
-        self.crv_raw[0].setData(self.x, arr['a_raw'])
-        self.crv_raw[1].setData(self.x, arr['b_raw'])
-        self.crv_raw[2].setData(self.x, arr['c_raw'])
+        self.crv_raw[0].setData(self.x, arr['a'])
+        self.crv_raw[1].setData(self.x, arr['b'])
+        self.crv_raw[2].setData(self.x, arr['c'])
         self.crv_rpm[0].setData(self.x, arr['m_rpm'])
         self.crv_rpm[1].setData(self.x, arr['red_rpm'])
         self.crv_ang[0].setData(self.x, arr['m_ang'])
@@ -594,7 +763,7 @@ class MotorMonitor(QMainWindow):
             self.rec_file   = open(path, 'w', newline='')
             self.rec_writer = csv.writer(self.rec_file)
             self.rec_writer.writerow(['timestamp','pvdd','i1','i2','i3',
-                'a_raw','b_raw','c_raw','nfault','noctw','ntc','m_ang','red_ang','m_rpm','red_rpm','accx','accy','accz','gyrx','gyry','gyrz','state'])
+                'a','b','c','nfault','noctw','ntc','m_ang','red_ang','m_rpm','red_rpm','accx','accy','accz','gyrx','gyry','gyrz','state'])
             self.recording = True
             self.btn_record.setText("⏹  Stop Recording")
             self._status(f"Recording → {path}", "ok")

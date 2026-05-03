@@ -13,7 +13,6 @@
 typedef struct {
     float angle;
     uint8_t status;
-    uint8_t push;
 } mag_data;
 
 enum MT6701_Status {
