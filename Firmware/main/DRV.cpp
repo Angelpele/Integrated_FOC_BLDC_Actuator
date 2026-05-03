@@ -248,7 +248,7 @@ bool DRV::ramp(float angle, float init_freq, float obj_freq) {
         ramp_active = true;
     }
 
-    float step = (fabsf(obj_freq - init_freq) / ramp_duration) * dt;
+    float step = ramp_rate * dt;
     if (ramp_target_freq > electrical_freq){
         electrical_freq = fminf(electrical_freq + step, ramp_target_freq);
     }else{
@@ -263,7 +263,14 @@ bool DRV::ramp(float angle, float init_freq, float obj_freq) {
     float theta_elec_raw = fmodf(theta_mag * (float)MOTOR_POLE_PAIRS + elec_offset, 2.0f * M_PI);
     if (theta_elec_raw < 0.0f) theta_elec_raw += 2.0f * M_PI;
 
-    float blend    = fabsf(electrical_freq - init_freq) / fabsf(obj_freq - init_freq + 1e-6f);
+    float t = fabsf(electrical_freq - init_freq) / fabsf(obj_freq - init_freq + 1e-6f);
+    float blend    = t * t * (3.0f - 2.0f * t); // Smoothstep for better transition, s curve equation
+
+    // Low pass filter for angle estimation during ramping, same as spinning
+    static float theta_elec_lpf = 0.0f;
+    if (theta_reset) { theta_elec_lpf = phase_accumulator; theta_reset = false; }
+    theta_elec_lpf = theta_elec_lpf + CLOSED_LOOP_LPF * (theta_elec_raw - theta_elec_lpf);
+
     float theta_elec = (1.0f - blend) * phase_accumulator + blend * theta_elec_raw;
 
     float duty_a = (sinf(theta_elec)                       * modulation_index + 1.0f) * 50.0f;

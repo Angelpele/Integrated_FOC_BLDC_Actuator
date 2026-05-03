@@ -400,14 +400,26 @@ void telemetryLoop(void* arg) {
                 else if (strcmp(cmd, "STOP") == 0) gpio_set_level(EN_DRV, 0);
                 else if (strncmp(cmd, "ALPHA:", 6) == 0) {
                     float alpha = atof(cmd + 6);
-                    drv.set_closed_loop_lpf(alpha);
-                    printf("Closed-loop LPF alpha set to %.3f\n", alpha);
+                    drv.set_alpha(alpha);
+                    printf("Alpha set to %.3f\n", alpha);
                     fflush(stdout);
                 }
                 else if (strncmp(cmd, "BETA:", 5) == 0) {
                     float beta = atof(cmd + 5);
-                    drv.set_rpm_lpf(beta);
-                    printf("RPM LPF beta set to %.3f\n", beta);
+                    drv.set_beta(beta);
+                    printf("Beta set to %.3f\n", beta);
+                    fflush(stdout);
+                }
+                else if (strncmp(cmd, "TETA:", 5) == 0) {
+                    float teta = atof(cmd + 5);
+                    drv.set_teta(teta);
+                    printf("Teta set to %.3f\n", teta);
+                    fflush(stdout);
+                }
+                else if (strncmp(cmd, "DUR:", 5) == 0) {
+                    float duration = atof(cmd + 5);
+                    drv.set_ramp_duration(duration);
+                    printf("Ramp duration set to %.3f\n", duration);
                     fflush(stdout);
                 }
                 else if (strcmp(cmd, "FAULT_OVERRIDE_ON") == 0) drv.set_override(true);

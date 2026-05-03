@@ -83,8 +83,9 @@ class DRV {
 
         float reducer_RPM(float motor_RPM){ return motor_RPM / reducer_ratio; }
 
-        void set_closed_loop_lpf(float alpha){ CLOSED_LOOP_LPF = alpha; }
-        void set_rpm_lpf(float alpha){ RPM_LPF = alpha; }
+        void set_alpha(float alpha){ramp_rate = alpha; }
+        void set_beta(float beta){ modulation_index = beta; }
+        void set_teta(float t){ dt = t; }
 
     private: 
         // DRV data
@@ -127,13 +128,13 @@ class DRV {
         bool aligned = false;
         float offset = 0.0;
         float align_time = 0.0;
-        float ALIGN_DURATION = 1f;   // 1000 ms
+        float ALIGN_DURATION = 1.0f;   // 1000 ms
         float ALIGN_DUTY = 15.0f;
 
         // Waveform generation
-        uint32_t PWM_freq = 20000; // 20 kHz carrier frequency for MCPWM
+        uint32_t PWM_freq = 40000; // 40 kHz carrier frequency for MCPWM
         float phase_accumulator = 0;
-        float modulation_index = 1; // Amplitude (0.0 to 1.0) if higher -> overmodulation
+        float modulation_index = 0.8f; // Amplitude (0.0 to 1.0) if higher -> overmodulation, 0.8 best for high speeds
         float electrical_freq = 2; // Motor Frequency (Hz), speed of the rotating field, higher than 0.5 to avoid deadzone
         float elec_offset = 0.0f; 
         float theta_reset = true;
@@ -161,8 +162,8 @@ class DRV {
         int64_t rpm_last_time   = 0;
         float   rpm_filtered    = 0.0f;
         
-        float CLOSED_LOOP_LPF = 0.15f;
-        float RPM_LPF      = 0.70f; 
+        float CLOSED_LOOP_LPF = 1.0f;  // 1.0 = no filtering for mag
+        float RPM_LPF      = 0.80f;    // 0.3 for fast speeds, 0.8 for slow speeds
         static constexpr float RPM_UNWRAP_THR     = 180.0f;
         static constexpr int64_t RPM_MIN_DT_US    = 100;    // guard against /0 on first call
         
