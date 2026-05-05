@@ -5,4 +5,5 @@ TVS input SMAJ30CA											TVS input SMCJ45CA
 no ext cap required											Suggested external cap 1000uF (50V)
 IRF mosfets can be used										FH4008 Mosfets required
 						
-12uH inductor												22uF inductor
+12uH inductor												22uF inductor (36 to 16)     12uH or less (36 to 5)
+Change Vsense resistors 52.3k and 10k							Obtain values excel
