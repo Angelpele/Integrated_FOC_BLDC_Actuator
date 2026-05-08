@@ -4372,7 +4372,7 @@
 			(size 0.8 0.95)
 			(layers "F.Cu" "F.Mask" "F.Paste")
 			(roundrect_rratio 0.25)
-			(net 101 "3V3")
+			(net 2 "5V")
 			(pintype "passive")
 			(uuid "4ddf64bd-d466-4f4c-8ca1-6f9ee64f8975")
 		)
@@ -15973,7 +15973,7 @@
 				)
 			)
 		)
-		(property "Value" "22uF"
+		(property "Value" "12uH"
 			(at 0 1.43 90)
 			(layer "F.Fab")
 			(uuid "39e6d09e-4f5b-4f3f-a7b1-02b097d4a31f")

@@ -2,6 +2,7 @@
 #include "DRV.h"
 #include "MT6701.h"
 #include "bmi.h"
+#include "MCP2551.h"
 
 // TIMER //
 volatile uint32_t isr_counter = 0;
@@ -20,6 +21,7 @@ DRV_data drv_pkg;
 angle_data fbk_pkg;
 BMI_data bmi_pkg;
 TelemetryPacket pkg;
+CAN CAN_bus;
 
 SemaphoreHandle_t drv_mutex = NULL;
 SemaphoreHandle_t fbk_mutex = NULL;
@@ -135,11 +137,15 @@ int initialize() {
         }
     }
 
+    if (CAN_bus.init() != 0) {
+        status |= 8;
+    }
     return status; 
 }
 
 int calibration() {
     drv.setup_mcpwm();
+    CAN_bus.test();
     return drv.calibration() + mag.calibration() /*+ bmi270.calibration()*/;
 }
 

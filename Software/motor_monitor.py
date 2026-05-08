@@ -334,7 +334,7 @@ class MotorMonitor(QMainWindow):
         v.setContentsMargins(16, 16, 16, 16); v.setSpacing(12)
 
         grid = QWidget(); g = QGridLayout(grid); g.setSpacing(10)
-        self.card_pvdd   = MetricCard("PVDD",        "V",   warn=15, danger=18)
+        self.card_pvdd   = MetricCard("PVDD",        "V",   warn=16, danger=18)
         self.card_i1     = MetricCard("Current 1",   "A",   warn=20, danger=35)
         self.card_i2     = MetricCard("Current 2",   "A",   warn=20, danger=35)
         self.card_i3     = MetricCard("Current 3",   "A",   warn=20, danger=35)

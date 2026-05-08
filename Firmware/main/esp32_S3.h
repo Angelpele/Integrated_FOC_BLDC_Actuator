@@ -24,6 +24,7 @@
 #include "math.h"
 #include "fcntl.h"
 #include "driver/usb_serial_jtag.h"
+#include "driver/twai.h"
 
 
 // GENERAL GPIO //
@@ -144,7 +145,7 @@ typedef struct {
     float angle;
     uint8_t status;
 } angle_data;
-
+    
 //Timer 1MHz
 /*/
 #define TIMER_DIVIDER 40          // 40 MHz / 80 = 0.5 MHz timer
