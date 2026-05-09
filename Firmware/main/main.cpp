@@ -12,16 +12,19 @@ TaskHandle_t fbkTaskHandle = NULL;
 TaskHandle_t bmiTaskHandle = NULL;
 TaskHandle_t drvTaskHandle = NULL;
 TaskHandle_t telemetryTaskHandle = NULL;
+TaskHandle_t canTaskHandle = NULL;
 
 // MAIN VARIABLE DECLARATION //
 DRV drv;
 MT6701 mag;
 BMI270 bmi270;
+CAN CAN_bus;
 DRV_data drv_pkg;
 angle_data fbk_pkg;
 BMI_data bmi_pkg;
 TelemetryPacket pkg;
-CAN CAN_bus;
+CANPacket slave_pkg;
+MasterPacket master_pkg;
 
 SemaphoreHandle_t drv_mutex = NULL;
 SemaphoreHandle_t fbk_mutex = NULL;
@@ -38,6 +41,7 @@ void fbkLoop(void* arg);
 void drvLoop(void* arg);
 void telemetryLoop(void* arg);
 void bmiLoop(void* arg);
+void canLoop(void* arg);
 
 SystemState system_state = SYSTEM_INIT;
 DRV_MotionState motion = MOTION_IDLE;
@@ -46,7 +50,9 @@ ControlMode control_mode = MODE_CLOSED_LOOP;
 
 bool debug_mode_enabled = true;
 bool included_bmi = false;
-
+bool slave_motor = true;
+uint8_t motor_dest_id = 1; 
+uint8_t master_id = 0;
 
 extern "C" void app_main(void)
 {
@@ -188,6 +194,7 @@ void create_tasks_once() {
         }
         xTaskCreatePinnedToCore(drvLoop, "drvLoop", 4096, NULL, 10, &drvTaskHandle, 0);
         xTaskCreatePinnedToCore(telemetryLoop, "telemetryLoop", 8192, NULL, 7, &telemetryTaskHandle, 0);
+        xTaskCreatePinnedToCore(canLoop, "canLoop", 4096, NULL, 10, &canTaskHandle, 0);
         tasks_created = true;
     }
 }
@@ -309,6 +316,47 @@ void drvLoop(void* arg) {
         xSemaphoreTake(drv_mutex, portMAX_DELAY);
             drv_pkg = temp;
         xSemaphoreGive(drv_mutex);
+        esp_task_wdt_reset();
+    }
+}
+
+void canLoop(void* arg) {
+    esp_task_wdt_add(NULL);
+    while (true) {
+        if(slave_motor){
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            DRV_data td;
+            angle_data tm;
+            BMI_data tb;
+
+            if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
+                td = drv_pkg;
+                xSemaphoreGive(drv_mutex);
+            } if (xSemaphoreTake(fbk_mutex, portMAX_DELAY) == pdTRUE) {
+                tm = fbk_pkg;
+                xSemaphoreGive(fbk_mutex);
+            }
+            float motor_rpm = drv.real_RPM(tm.angle);
+            slave_pkg.ID = MOTOR_ID;
+            slave_pkg.pvdd = td.PVDD;
+            slave_pkg.temp = td.temperature;
+            slave_pkg.red_angle = drv.reducer_angle(tm.angle);
+            slave_pkg.red_rpm = drv.reducer_RPM(motor_rpm);
+            slave_pkg.nfault = td.NFAULT_raw;
+            slave_pkg.oc = td.NOCTW_raw;
+
+            CAN_bus.sendData(slave_pkg, master_id);
+            CAN_bus.receiveData(&master_pkg, master_id);
+        }
+        else{
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            master_pkg.ID = MOTOR_ID;
+            master_pkg.pos = 0.0f;
+            master_pkg.vel = 0.0f; 
+            master_pkg.torque = 0.0f; 
+
+            CAN_bus.sendData(master_pkg, motor_dest_id);
+        }
         esp_task_wdt_reset();
     }
 }
@@ -453,6 +501,10 @@ void IRAM_ATTR controlISR(void* arg)
         vTaskNotifyGiveFromISR(drvTaskHandle, &woken);
     if (tick % TELEMETRY_DIVIDER == 0)
         vTaskNotifyGiveFromISR(telemetryTaskHandle, &woken);
+    if (included_bmi && tick % BMI_DIVIDER == 0)
+        vTaskNotifyGiveFromISR(bmiTaskHandle, &woken);
+    if (tick % CAN_DIVIDER == 0)
+        vTaskNotifyGiveFromISR(canTaskHandle, &woken);
 
     portYIELD_FROM_ISR(woken);
 }

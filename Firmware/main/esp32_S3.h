@@ -4,8 +4,6 @@
 #include "stdio.h"
 #include "driver/gpio.h"  //ESP32 GPIO
 #include "driver/adc.h"
-//#include "driver/mcpwm_prelude.h"
-//#include "driver/gptimer.h"
 #include "driver/mcpwm.h"
 #include "driver/timer.h"
 #include "driver/ledc.h"
@@ -141,6 +139,27 @@ typedef struct {
 } TelemetryPacket;
 #pragma pack(pop)
 
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t ID;
+    float pvdd;
+    float temp;
+    float red_angle;
+    float red_rpm;
+    uint8_t nfault;
+    uint8_t oc;
+} CANPacket;
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t ID;
+    float pos;
+    float vel;
+    float torque;
+} MasterPacket;
+#pragma pack(pop)
+
 typedef struct {
     float angle;
     uint8_t status;
@@ -165,7 +184,8 @@ typedef struct {
 #define FOC_DIVIDER        1    //20khz (max 200 khz)
 #define FBK_DIVIDER        4    //5khz
 #define BMI_DIVIDER        20   //1khz
-#define DRV_DIVIDER        40   //500Hz  
+#define DRV_DIVIDER        40   //500Hz 
+#define CAN_DIVIDER        40   //500Hz 
 #define TELEMETRY_DIVIDER  1000  // 20hz
 
 #endif

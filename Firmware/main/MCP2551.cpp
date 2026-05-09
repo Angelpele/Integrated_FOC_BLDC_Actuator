@@ -4,6 +4,11 @@
 //===================================================================================================//
 
 #include "MCP2551.h"
+template bool CAN::sendData<CANPacket>(const CANPacket& data, uint8_t ID);
+template bool CAN::sendData<MasterPacket>(const MasterPacket& data, uint8_t ID);
+
+template bool CAN::receiveData<CANPacket>(CANPacket* packet, uint8_t expected_id);
+template bool CAN::receiveData<MasterPacket>(MasterPacket* packet, uint8_t expected_id);
 
 int CAN::init()
 {
@@ -33,22 +38,24 @@ int CAN::test()
     test.rpm  = 1234.0f;
 
     // Send dummy packet
-    if (!sendData(&test)) {
+    if (!sendData(&test, MOTOR_ID)) {
         printf("CAN TEST: TX failed\n");
         return -1;
     }
     return 0;
 }
 
-bool CAN::sendData(TelemetryPacket* data)
+template <typename T>
+bool CAN::sendData(const T& data, uint8_t ID)
 {
-    const uint8_t* raw = (const uint8_t*)data;
-    size_t total = sizeof(TelemetryPacket);
+    const uint8_t* raw = (const uint8_t*)&data;
+    size_t total = sizeof(T);
     uint8_t num_chunks = (total + CHUNK_PAYLOAD - 1) / CHUNK_PAYLOAD;
+    if (num_chunks > 15) return false; // Too large to send
 
     for (uint8_t i = 0; i < num_chunks; i++) {
         twai_message_t msg = {};
-        msg.identifier       = MOTOR_ID;
+        msg.identifier       = ID;
         msg.extd             = 0;
         msg.rtr              = 0;
         msg.dlc_non_comp     = 0;
@@ -63,13 +70,13 @@ bool CAN::sendData(TelemetryPacket* data)
         memcpy(&msg.data[1], raw + offset, chunk_len);
 
         if (twai_transmit(&msg, pdMS_TO_TICKS(100)) != ESP_OK) {return false;}
-        delayMicroseconds(2000);
+        vTaskDelay(pdMS_TO_TICKS(TX_GAP_MS));
     }
     return true;
 }
 
 // Clean up and reset state for new packet reception
-void reset_rx_state() {
+void CAN::reset_rx_state() {
     memset(rx_buf, 0, sizeof(rx_buf));
     chunks_received = 0;
     expected_chunks = 0;
@@ -77,14 +84,14 @@ void reset_rx_state() {
 }
 
 
-bool process_frame(const twai_message_t* msg)
+bool CAN::process_frame(const twai_message_t* msg)
 {
     uint8_t seq       = msg->data[0];
     uint8_t total     = (seq >> 4) & 0x0F;
     uint8_t chunk_idx = seq & 0x0F;
 
     // Reset received data if timeout since last chunk
-    if (chunks_received > 0 && (millis() - last_chunk_ms) > RX_TIMEOUT_MS)
+    if (chunks_received > 0 && ((esp_timer_get_time() / 1000) - last_chunk_ms) > RX_TIMEOUT_MS)
         reset_rx_state();
 
     // chunk 0 always starts a new packet
@@ -101,29 +108,31 @@ bool process_frame(const twai_message_t* msg)
 
     // Copy payload into buffer
     size_t offset    = (size_t)chunk_idx * CHUNK_PAYLOAD;
-    size_t copy_len  = ((sizeof(TelemetryPacket) - offset) >= CHUNK_PAYLOAD) ? CHUNK_PAYLOAD : (sizeof(TelemetryPacket) - offset);
+    size_t copy_len  = CHUNK_PAYLOAD;
+    if (offset + copy_len > MAX_CAN_PACKET_SIZE) { reset_rx_state(); return false; }
+
     memcpy(rx_buf + offset, &msg->data[1], copy_len);
 
     chunks_mask |= (1 << chunk_idx);
     chunks_received++;
-    last_chunk_ms = millis();
+    last_chunk_ms = esp_timer_get_time() / 1000;  
 
     return (chunks_received == expected_chunks);    // Return true if packet is complete
 }
 
-bool receiveData(TelemetryPacket* packet) {
+template <typename R>
+bool CAN::receiveData(R* packet, uint8_t expected_id) {
     twai_message_t msg;
     while (true) {
         // Block indefinitely until a frame arrives — never misses a frame
         if (twai_receive(&msg, portMAX_DELAY) == ESP_OK) {
+            if (msg.identifier != expected_id) {
+                continue; // Ignore frames with unexpected ID
+            }
             if (process_frame(&msg)) {
-                TelemetryPacket* pkt = (TelemetryPacket*)rx_buf;
-                if (pkt->ID == MOTOR_ID) {
-                    packets_received++;
-                    *packet = *pkt;
-                    return true;
-                }
+                memcpy(packet, rx_buf, sizeof(R));
                 reset_rx_state();
+                return true;
             }
         }
     }
