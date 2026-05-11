@@ -40,16 +40,24 @@ class DRV {
         int calibration();
         DRV_data getdata();
         int fault_detection();
-        float get_currents_angle();
 
         float real_RPM(float angle_deg);
         float reducer_angle(float motor_angle);
         void setup_mcpwm();
+        bool svpwm(float v_a, float v_b, float v_c);
         AlignOffset align(float angle);
         bool ramp(float angle, float init_freq, float obj_freq);
-        bool closed_spin(float angle, float freq);
-        bool svpwm(float angle, float freq);
-        bool run_openloop_bemf(float target_freq, float duty);
+        bool sinusoidal_spin(float fbk_angle, float freq);
+        bool foc_control(float fbk_angle, float target_current);
+        void request_foc_stop() { foc_stop = true; }
+        void reset_foc() {
+            i_d_filt = 0.0f; i_q_filt = 0.0f;
+            errorq_prev = 0.0f; errord_prev = 0.0f;
+            errorq_integral = 0.0f; errord_integral = 0.0f;
+            foc_initialized = false;
+            foc_stop = false;
+        }
+        bool openloop_bemf(float target_freq, float duty);
         void brake();
         void idle();
         void test_working_trans();
@@ -134,7 +142,7 @@ class DRV {
         // Waveform generation
         uint32_t PWM_freq = 40000; // 40 kHz carrier frequency for MCPWM
         float phase_accumulator = 0;
-        float modulation_index = 0.8f; // Amplitude (0.0 to 1.0) if higher -> overmodulation, 0.8 best for high speeds
+        float modulation_index = 1.0f; // Amplitude (0.0 to 1.0) if higher -> overmodulation, 0.8 best for high speeds
         float electrical_freq = 2; // Motor Frequency (Hz), speed of the rotating field, higher than 0.5 to avoid deadzone
         float elec_offset = 0.0f; 
         float theta_reset = true;
@@ -166,6 +174,29 @@ class DRV {
         float RPM_LPF      = 0.80f;    // 0.3 for fast speeds, 0.8 for slow speeds
         static constexpr float RPM_UNWRAP_THR     = 180.0f;
         static constexpr int64_t RPM_MIN_DT_US    = 100;    // guard against /0 on first call
+
+        // Velocity tunning
+        float Vel_Kp = 0.5f;
+        float Vel_Ki = 0.1f;
+        float Vel_Kd = 0.01f;
+        float vel_LPF = 0.8f;
+
+        // Current tunning
+        float Id_LPF = 0.1f;
+        float Iq_LPF = 0.1f;
+        float Iq_Kp  = 1.0f;   float Iq_Ki = 0.01f;   float Iq_Kd = 0.0f;
+        float Id_Kp  = 1.0f;   float Id_Ki = 0.01f;   float Id_Kd = 0.0f;
+        float i_d_filt = 0.0f;
+        float i_q_filt = 0.0f;
+        float errorq_prev = 0.0f;
+        float errorq_integral = 0.0f;
+        float errord_prev = 0.0f;
+        float errord_integral = 0.0f;
+        float foc_prev_time = 0.0f;
+        bool foc_initialized = false;
+        bool foc_stop = false;
+
+
         
     };
 

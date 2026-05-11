@@ -205,6 +205,28 @@ void DRV::setup_mcpwm() {
     mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 40, 40);
 }
 
+bool DRV::svpwm(float v_a, float v_b, float v_c) {
+    // Space Vector PWM implementation
+    float Vmax = fmaxf(fmaxf(fabsf(v_a), fabsf(v_b)), fabsf(v_c));
+    if (Vmax > 1.0f) {
+        v_a /= Vmax;
+        v_b /= Vmax;
+        v_c /= Vmax;
+    }
+
+    float duty_a = (v_a + 1.0f) * 50.0f;
+    float duty_b = (v_b + 1.0f) * 50.0f;
+    float duty_c = (v_c + 1.0f) * 50.0f;
+
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty_a);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100.0f - duty_a);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, duty_b);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_B, 100.0f - duty_b);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, duty_c);
+    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 100.0f - duty_c);
+    return false;
+}
+
 AlignOffset DRV::align(float angle) {
     AlignOffset result = {false, 0.0f};
 
@@ -314,9 +336,9 @@ void DRV::idle() {
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 0.0f);
 }
 
-// ============= Spin functions ================
+// ============= Control functions ================
 
-bool DRV::closed_spin(float angle, float freq) {
+bool DRV::sinusoidal_spin(float fbk_angle, float freq) {
 
     if (spin_duration > 0.0f) {
         spin_elapsed += dt;
@@ -328,7 +350,7 @@ bool DRV::closed_spin(float angle, float freq) {
     }
 
     electrical_freq = freq;
-    float theta_mag = angle * (M_PI / 180.0f);
+    float theta_mag = fbk_angle * (M_PI / 180.0f);
     float theta_elec_raw = fmodf(theta_mag * (float)MOTOR_POLE_PAIRS + elec_offset, 2.0f * M_PI);
     if (theta_elec_raw < 0.0f) theta_elec_raw += 2.0f * M_PI;
 
@@ -353,132 +375,88 @@ bool DRV::closed_spin(float angle, float freq) {
     return false;
 }
 
-float DRV::get_currents_angle() {
+bool DRV::foc_control(float fbk_angle, float target_current)
+{
+    if (foc_stop) {
+        reset_foc();
+        return true;
+    }
+
+    float now = (float)esp_timer_get_time() * 1e-6f;
+    if (!foc_initialized) {
+        foc_prev_time   = now;
+        foc_initialized = true;
+        return false; 
+    }
+
+    float dt = now - foc_prev_time;
+    if (dt <= 0.0f || dt > 0.1f) dt = 0.000050f;  // clamp to 50µs
+
+    // Current sensing
     SO1_raw = adc1_get_raw(SO1);
     SO2_raw = adc1_get_raw(SO2);
     float current1 = (float)(SO1_offset - SO1_raw) * voltage_step / (current_gain * R_shunt);
     float current2 = (float)(SO2_offset - SO2_raw) * voltage_step / (current_gain * R_shunt);
 
-    static constexpr float L    = 0.000065f;    // ~65 uH estimated for 5010 750KV
-    static constexpr float dt   = TIMER_INTERVAL_US * 0.000001f * FBK_DIVIDER;    // Fbk loop dt
+    // Mechanical angle to electrical angle
+    float theta = fbk_angle * (M_PI / 180.0f) * (float)MOTOR_POLE_PAIRS;
+    theta = fmodf(theta, 2.0f * M_PI);
+    if (theta < 0.0f) theta += 2.0f * M_PI;
 
-    /*int PVDD_raw = 0;
-    adc2_get_raw(PVDD_SENSE, ADC_WIDTH_BIT_12, &PVDD_raw);
-    float Vbus = getPVDD(PVDD_raw);*/
+    float cos_t = cosf(theta);
+    float sin_t = sinf(theta);
 
-    // Reconstruct third phase (Kirchhoff: ia + ib + ic = 0)
-    float ia = current1;
-    float ib = current2;
-    float ic = -(ia + ib);
+    // Clarke transform (2 sensors, balanced 3 phase assumed)
+    float i_alpha =  current1;
+    float i_beta  = (current1 + 2.0f * current2) / sqrtf(3.0f);
 
-    // Clarke transform (3-phase → αβ)
-    float i_alpha = ia;
-    float i_beta  = (ia + 2.0f * ib) * (1.0f / 1.7320508f); // 1/sqrt(3)
+    // Park transform
+    float i_d =  i_alpha * cos_t + i_beta * sin_t;
+    float i_q = -i_alpha * sin_t + i_beta * cos_t;
 
-    // Estimated voltages (open loop — assumes balanced PWM, no Park feedback yet)
-    // Vbus/3 is the neutral point in balanced 3-phase
-    static float v_alpha = 0.0f;
-    static float v_beta  = 0.0f;
+    // Low-pass filter
+    i_d_filt = i_d_filt * (1.0f - Id_LPF) + Id_LPF * i_d;
+    i_q_filt = i_q_filt * (1.0f - Iq_LPF) + Iq_LPF * i_q;
 
-    // Flux observer state
-    static float flux_alpha = 0.0f;
-    static float flux_beta  = 0.0f;
-    static float i_alpha_prev = 0.0f;
-    static float i_beta_prev  = 0.0f;
+    // Current errors
+    float error_q = target_current - i_q_filt;
+    float error_d = 0.0f - i_d_filt;
 
-    // Back-EMF = V - R*I - L*(dI/dt)
-    float di_alpha = (i_alpha - i_alpha_prev) / dt;
-    float di_beta  = (i_beta  - i_beta_prev)  / dt;
+    // Integrate before updating prev_time
+    errorq_integral += error_q * dt;
+    errord_integral += error_d * dt;
 
-    float bemf_alpha = v_alpha - MOTOR_RESISTANCE * i_alpha - L * di_alpha;
-    float bemf_beta  = v_beta  - MOTOR_RESISTANCE * i_beta  - L * di_beta;
+    // Anti windup clamp, avoid saturation
+    errorq_integral = fmaxf(-overvoltage, fminf(overvoltage, errorq_integral));
+    errord_integral = fmaxf(-overvoltage, fminf(overvoltage, errord_integral));
 
-    // Integrate back-EMF to get flux
-    flux_alpha += bemf_alpha * dt;
-    flux_beta  += bemf_beta  * dt;
+    // PID
+    float v_q = Iq_Kp * error_q + Iq_Ki * errorq_integral + Iq_Kd * (error_q - errorq_prev) / dt;
+    float v_d = Id_Kp * error_d + Id_Ki * errord_integral + Id_Kd * (error_d - errord_prev) / dt;
 
-    // Angle from flux
-    float angle = atan2f(flux_beta, flux_alpha) * (180.0f / M_PI);
-    if (angle < 0.0f) angle += 360.0f;
+    // Update state for next cycle
+    foc_prev_time = now;
+    errorq_prev   = error_q;
+    errord_prev   = error_d;
 
-    // Update previous values
-    i_alpha_prev = i_alpha;
-    i_beta_prev  = i_beta;
+    // Voltage clamp
+    float v_limit = fminf(modulation_index * getPVDD(PVDD_raw) / sqrtf(3.0f), overvoltage);
+    v_q = fmaxf(-v_limit, fminf(v_limit, v_q));
+    v_d = fmaxf(-v_limit, fminf(v_limit, v_d));
 
-    return angle; // deg 0 to 360
+    // Inverse Park
+    float v_alpha = v_d * cos_t - v_q * sin_t;
+    float v_beta  = v_d * sin_t + v_q * cos_t;
+
+    // Inverse Clarke
+    float v_a =  v_alpha;
+    float v_b = -0.5f * v_alpha + (sqrtf(3.0f) / 2.0f) * v_beta;
+    float v_c = -0.5f * v_alpha - (sqrtf(3.0f) / 2.0f) * v_beta;
+
+    return svpwm(v_a, v_b, v_c);
 }
 
-bool DRV::svpwm(float angle_deg, float freq) {
-
-    if (!spin_timer_started) {
-        spin_start_time = (float)esp_timer_get_time() / 1e6f;
-        spin_timer_started = true;
-    }
-    float elapsed = (float)esp_timer_get_time() / 1e6f - spin_start_time;
-    if (spin_duration > 0.0f && elapsed >= spin_duration) {
-        spin_timer_started = false;   // reset for next call
-        return true;                  // signal MOTION_IDLE
-    }
-
-    // ── Electrical angle in radians ───────────────────────
-    float theta = angle_deg * (M_PI / 180.0f);
-
-    // Normalize to [0, 2π)
-    while (theta <  0.0f)        theta += 2.0f * M_PI;
-    while (theta >= 2.0f * M_PI) theta -= 2.0f * M_PI;
-
-    // ── Sector (0–5) ──────────────────────────────────────
-    // Each sector = 60°
-    int sector = (int)(theta / (M_PI / 3.0f));           // 0..5
-    float theta_s = theta - sector * (M_PI / 3.0f);      // angle within sector [0, π/3)
-
-    // ── SVM time fractions ────────────────────────────────
-    // T1, T2: active vector times (normalized to 1 period)
-    float T1 = modulation_index * sinf((M_PI / 3.0f) - theta_s);
-    float T2 = modulation_index * sinf(theta_s);
-    float T0 = 1.0f - T1 - T2;                           // zero-vector time
-
-    // Clamp to avoid overmodulation
-    if (T0 < 0.0f) {
-        float scale = 1.0f / (T1 + T2);
-        T1 *= scale; T2 *= scale; T0 = 0.0f;
-    }
-
-    // ── Duty cycles per sector ────────────────────────────
-    // Center-aligned: split T0/2 at both ends
-    float Ta, Tb, Tc;
-    float half0 = T0 / 2.0f;
-
-    switch (sector) {
-        case 0: Ta = T1 + T2 + half0; Tb = T2 + half0; Tc = half0;          break;
-        case 1: Ta = T1 + half0;      Tb = T1 + T2 + half0; Tc = half0;     break;
-        case 2: Ta = half0;           Tb = T1 + T2 + half0; Tc = T2 + half0; break;
-        case 3: Ta = half0;           Tb = T1 + half0;      Tc = T1 + T2 + half0; break;
-        case 4: Ta = T2 + half0;      Tb = half0;           Tc = T1 + T2 + half0; break;
-        case 5: Ta = T1 + T2 + half0; Tb = half0;           Tc = T1 + half0; break;
-        default: Ta = Tb = Tc = 0.5f; break;
-    }
-
-    // ── Clamp duties to [0, 1] ────────────────────────────
-    Ta = fmaxf(0.0f, fminf(1.0f, Ta));
-    Tb = fmaxf(0.0f, fminf(1.0f, Tb));
-    Tc = fmaxf(0.0f, fminf(1.0f, Tc));
-
-    // ── Output to MCPWM ──────────────────────────────────
-    // MCPWM_DUTY_MODE_0 + ACTIVE_HIGH_COMPLIMENT: A is high-side, B is complementary low-side
-    // Dead-time is handled by hardware (40 ticks each side)
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, Ta * 100.0f);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, Tb * 100.0f);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, Tc * 100.0f);
-
-    mcpwm_set_duty_type(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, MCPWM_DUTY_MODE_0);
-    mcpwm_set_duty_type(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, MCPWM_DUTY_MODE_0);
-    mcpwm_set_duty_type(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, MCPWM_DUTY_MODE_0);
-
-    return false;
-}
-
-bool DRV::run_openloop_bemf(float target_freq, float duty) {
+bool DRV::openloop_bemf(float target_freq, float duty) {
     static int8_t prev_sign_A = 0, prev_sign_B = 0, prev_sign_C = 0;
     static uint8_t commutation_step = 0;
     static int64_t last_zc_time = 0;
@@ -575,7 +553,8 @@ bool DRV::run_openloop_bemf(float target_freq, float duty) {
             electrical_freq += ramp_rate * dt;
 
         modulation_index = duty;
-        return svpwm(phase_accumulator * (180.0f / M_PI), electrical_freq);
+        //return svpwm(phase_accumulator * (180.0f / M_PI), electrical_freq);
+        return true;
     }
 
     // ── 6-step commutation table ──────────────────────────

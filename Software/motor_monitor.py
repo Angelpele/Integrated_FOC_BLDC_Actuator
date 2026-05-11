@@ -486,11 +486,11 @@ class MotorMonitor(QMainWindow):
 
         # Dropdown and Stop logic
         self.cb_fbk = QComboBox()
-        self.cb_fbk.addItems(["MAG ENCODER", "HALL SENSOR", "FOC ANGLE"])
+        self.cb_fbk.addItems(["MAG ENCODER", "HALL SENSOR"])
         self.cb_fbk.currentTextChanged.connect(lambda m: self._send_serial(f"CMD:FBK:{m.upper().replace(' ','_')}\n"))
 
         self.cb_control_mode = QComboBox()
-        self.cb_control_mode.addItems(["OPENLOOP_BEMF", "CLOSED_LOOP", "SVPWM", "TRAPEZOIDAL"])
+        self.cb_control_mode.addItems(["OPENLOOP_BEMF", "CLOSED_FOC", "CLOSED_SINUSOIDAL"])
         self.cb_control_mode.currentTextChanged.connect(lambda m: self._send_serial(f"CMD:CTRL:{m.upper().replace(' ','_')}\n"))
 
         self.btn_brake_ctrl = QPushButton("🛑  STOP")

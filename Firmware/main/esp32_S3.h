@@ -88,25 +88,23 @@ enum SystemState {
     SYSTEM_RUNNING,
 };
 
-enum ControlSys{
+enum FeedbackSys{
     MAG,
     HALL,
-    FOC
 };
 
 enum DRV_MotionState {
     MOTION_IDLE,
-    MOTION_ALIGNING,
+    MOTION_STARTUP,
     MOTION_RAMPING,
     MOTION_SPINNING,
     MOTION_RAMPING_DOWN
 };
 
 enum ControlMode {
-    MODE_OPENLOOP_BEMF,
-    MODE_CLOSED_LOOP,
-    MODE_SVPWM,
-    MODE_TRAPEZOIDAL
+    MODE_OPENLOOP_BEMF,     // trapezoidal open loop
+    MODE_CLOSED_FOC,
+    MODE_CLOSED_SINUSOIDAL
 };
 
 #pragma pack(push, 1)
@@ -181,11 +179,9 @@ typedef struct {
 #define TIMER_DIVIDER 80          // 40 MHz / 80 = 0.5 MHz timer
 #define TIMER_INTERVAL_US 50      // 50 µs → 20 kHz
 
-#define FOC_DIVIDER        1    //20khz (max 200 khz)
-#define FBK_DIVIDER        4    //5khz
+#define CONTROL_DIVIDER        1    //20khz (max 200 khz)
 #define BMI_DIVIDER        20   //1khz
-#define DRV_DIVIDER        40   //500Hz 
-#define CAN_DIVIDER        40   //500Hz 
+#define CAN_DIVIDER        5   //4kHz 
 #define TELEMETRY_DIVIDER  1000  // 20hz
 
 #endif

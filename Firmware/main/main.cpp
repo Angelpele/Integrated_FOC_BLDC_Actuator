@@ -19,7 +19,6 @@ DRV drv;
 MT6701 mag;
 BMI270 bmi270;
 CAN CAN_bus;
-DRV_data drv_pkg;
 angle_data fbk_pkg;
 BMI_data bmi_pkg;
 TelemetryPacket pkg;
@@ -36,7 +35,7 @@ int calibration();
 void start_control_timer();
 void create_tasks_once();
 void controlISR(void* arg);
-void focLoop(void* arg);
+void controlLoop(void* arg);
 void fbkLoop(void* arg);
 void drvLoop(void* arg);
 void telemetryLoop(void* arg);
@@ -45,8 +44,8 @@ void canLoop(void* arg);
 
 SystemState system_state = SYSTEM_INIT;
 DRV_MotionState motion = MOTION_IDLE;
-ControlSys control_sys = MAG;
-ControlMode control_mode = MODE_CLOSED_LOOP;
+FeedbackSys fbk_sys = MAG;
+ControlMode control_mode = MODE_CLOSED_FOC;
 
 bool debug_mode_enabled = true;
 bool included_bmi = false;
@@ -79,7 +78,7 @@ extern "C" void app_main(void)
                 if (initialize() == 0) {
                     system_state = SYSTEM_CALIBRATION;
                     drv.set_override(true);
-                    mag.set_override(control_sys == MAG ? false : true);
+                    mag.set_override(fbk_sys == MAG ? false : true);
                     bmi270.set_override(!included_bmi);
                 } else {
                     printf("Initialization failed, retrying...\n");
@@ -187,30 +186,38 @@ void start_control_timer()
 void create_tasks_once() {
     static bool tasks_created = false;
     if (!tasks_created) {
-        xTaskCreatePinnedToCore(focLoop, "focLoop", 4096, NULL, 12, &focTaskHandle, 1);  //1 and 0 are the core IDs
-        xTaskCreatePinnedToCore(fbkLoop, "fbkLoop", 4096, NULL, 11, &fbkTaskHandle, 0);
+        xTaskCreatePinnedToCore(controlLoop, "controlLoop", 4096, NULL, 12, &focTaskHandle, 1);  //1 and 0 are the core IDs
         if (included_bmi){
             xTaskCreatePinnedToCore(bmiLoop, "bmiLoop", 4096, NULL, 10, &bmiTaskHandle, 0);
         }
-        xTaskCreatePinnedToCore(drvLoop, "drvLoop", 4096, NULL, 10, &drvTaskHandle, 0);
         xTaskCreatePinnedToCore(telemetryLoop, "telemetryLoop", 8192, NULL, 7, &telemetryTaskHandle, 0);
         xTaskCreatePinnedToCore(canLoop, "canLoop", 4096, NULL, 10, &canTaskHandle, 0);
         tasks_created = true;
     }
 }
 
-void focLoop(void* arg){
+void controlLoop(void* arg){
     esp_task_wdt_add(NULL);  // Subscribe to watchdog
+
     while(true){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        float angle;
-        xSemaphoreTake(fbk_mutex, portMAX_DELAY);
-        angle = fbk_pkg.angle;      // Obtain angle from magnetometer / hall feedback
-        xSemaphoreGive(fbk_mutex);
+        if (fbk_sys == MAG) {
+            mag_data temp = mag.getdata();
+            xSemaphoreTake(fbk_mutex, portMAX_DELAY);
+                fbk_pkg.angle = temp.angle;
+                fbk_pkg.status = temp.status;
+            xSemaphoreGive(fbk_mutex);
+        }
+
+        else if (fbk_sys == HALL) {
+            // future implementation of Hall sensor
+        }
 
         switch (motion) {
-            case MOTION_ALIGNING:
-                drv.align(angle).done;
+            case MOTION_STARTUP:
+                if (drv.align(fbk_pkg.angle).done) {
+                    motion = MOTION_RAMPING;
+                }
                 break;
 
             case MOTION_RAMPING:
@@ -220,7 +227,7 @@ void focLoop(void* arg){
                     drv.reset_spin_timer();
                     ramp_reset_done = true;
                 }
-                if (drv.ramp(angle, 2.0f, 20.0f)) {
+                if (drv.ramp(fbk_pkg.angle, 2.0f, 20.0f)) {
                     ramp_reset_done = false;   // reset for next ramp
                     motion = MOTION_SPINNING;
                 }
@@ -232,17 +239,15 @@ void focLoop(void* arg){
                 bool spin_elapsed = false;
                 switch (control_mode) {
                     case MODE_OPENLOOP_BEMF:
-                        spin_elapsed = drv.run_openloop_bemf(20.0f, 50.0f); //Target freq and duty
+                        spin_elapsed = drv.openloop_bemf(20.0f, 50.0f);
                         break;
-                    case MODE_CLOSED_LOOP:
-                        spin_elapsed = drv.closed_spin(angle, 20.0f); //Spinning freq
+                    case MODE_CLOSED_FOC:
+                        spin_elapsed = drv.foc_control(fbk_pkg.angle, 10.0f);
                         break;
-                    case MODE_SVPWM:
-                        spin_elapsed = drv.svpwm(angle, 20.0f); //Spinning freq
+                    case MODE_CLOSED_SINUSOIDAL:
+                        spin_elapsed = drv.sinusoidal_spin(fbk_pkg.angle, 20.0f);
                         break;
-                    case MODE_TRAPEZOIDAL:
-                        // Future implementation of trapezoidal control
-                    break;
+                    default: break;
                 }
                 if (spin_elapsed) {
                     motion = MOTION_IDLE;
@@ -250,7 +255,7 @@ void focLoop(void* arg){
                 break;
             }
             case MOTION_RAMPING_DOWN:
-                if (drv.ramp(angle, 10.0f, 0.5f))   //Target freq and final freq
+                if (drv.ramp(fbk_pkg.angle, 10.0f, 0.5f))   //Target freq and final freq
                     motion = MOTION_IDLE;
                 break;
 
@@ -269,22 +274,7 @@ void fbkLoop(void* arg) {
     while (true) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        if (control_sys == MAG) {
-            mag_data temp = mag.getdata();
-            xSemaphoreTake(fbk_mutex, portMAX_DELAY);
-                fbk_pkg.angle = temp.angle;
-                fbk_pkg.status = temp.status;
-            xSemaphoreGive(fbk_mutex);
-        }
-        else if (control_sys == FOC) {
-            float angle = drv.get_currents_angle();
-            xSemaphoreTake(fbk_mutex, portMAX_DELAY);
-                fbk_pkg.angle = angle;
-            xSemaphoreGive(fbk_mutex);
-        }
-        else if (control_sys == HALL) {
-            // future implementation of Hall sensor
-        }
+        
 
         esp_task_wdt_reset();
         taskYIELD();
@@ -308,18 +298,6 @@ void bmiLoop(void* arg) {
     }
 }
 
-void drvLoop(void* arg) {
-    esp_task_wdt_add(NULL);
-    while (true) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        DRV_data temp = drv.getdata();
-        xSemaphoreTake(drv_mutex, portMAX_DELAY);
-            drv_pkg = temp;
-        xSemaphoreGive(drv_mutex);
-        esp_task_wdt_reset();
-    }
-}
-
 void canLoop(void* arg) {
     esp_task_wdt_add(NULL);
     while (true) {
@@ -330,7 +308,7 @@ void canLoop(void* arg) {
             BMI_data tb;
 
             if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
-                td = drv_pkg;
+                td = drv.getdata();
                 xSemaphoreGive(drv_mutex);
             } if (xSemaphoreTake(fbk_mutex, portMAX_DELAY) == pdTRUE) {
                 tm = fbk_pkg;
@@ -374,7 +352,7 @@ void telemetryLoop(void* arg) {
         BMI_data tb;
 
         if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
-            td = drv_pkg;
+            td = drv.getdata();
             xSemaphoreGive(drv_mutex);
         } if (xSemaphoreTake(fbk_mutex, portMAX_DELAY) == pdTRUE) {
             tm = fbk_pkg;
@@ -433,24 +411,22 @@ void telemetryLoop(void* arg) {
             char* cmd = strchr((char*)rxbuf, ':');
             if (cmd != NULL) {
                 cmd++;
-                if      (strncmp(cmd, "FBK:MAG_ENCODER", 15) == 0) control_sys = MAG;
-                else if (strncmp(cmd, "FBK:HALL_SENSOR", 15) == 0) control_sys = HALL;
-                else if (strncmp(cmd, "FBK:FOC_ANGLE", 13) == 0) control_sys = FOC;
+                if      (strncmp(cmd, "FBK:MAG_ENCODER", 15) == 0) fbk_sys = MAG;
+                else if (strncmp(cmd, "FBK:HALL_SENSOR", 15) == 0) fbk_sys = HALL;
                 else if (strncmp(cmd, "CTRL:OPENLOOP_BEMF", 19) == 0) control_mode = MODE_OPENLOOP_BEMF;
-                else if (strncmp(cmd, "CTRL:CLOSED_LOOP", 16) == 0) control_mode = MODE_CLOSED_LOOP;
-                else if (strncmp(cmd, "CTRL:SVPWM", 10) == 0) control_mode = MODE_SVPWM;
-                else if (strncmp(cmd, "CTRL:TRAPEZOIDAL", 17) == 0) control_mode = MODE_TRAPEZOIDAL;
-                else if (strcmp(cmd, "IDLE") == 0) motion = MOTION_IDLE;
-                else if (strcmp(cmd, "ALIGN") == 0) motion = MOTION_ALIGNING;
+                else if (strncmp(cmd, "CTRL:CLOSED_FOC", 15) == 0) control_mode = MODE_CLOSED_FOC;
+                else if (strncmp(cmd, "CTRL:CLOSED_SINUSOIDAL", 23) == 0) control_mode = MODE_CLOSED_SINUSOIDAL;
+                else if (strcmp(cmd, "IDLE") == 0) motion = MOTION_IDLE, drv.request_foc_stop();
+                else if (strcmp(cmd, "ALIGN") == 0) motion = MOTION_STARTUP;
                 else if (strncmp(cmd, "RUN", 3) == 0){
                     int duration = atoi(strchr((char*)cmd, ':') + 1);
                     drv.set_spin_duration(duration);
                     drv.reset_spin_timer();
-                    motion = MOTION_RAMPING;
+                    motion = MOTION_STARTUP;
                     printf("Spin duration set to %d seconds\n", duration);
                     fflush(stdout);
                 }
-                else if (strcmp(cmd, "BRAKE") == 0) motion = MOTION_RAMPING_DOWN;
+                else if (strcmp(cmd, "BRAKE") == 0) motion = MOTION_RAMPING_DOWN, drv.request_foc_stop();
                 else if (strcmp(cmd, "STOP") == 0) gpio_set_level(EN_DRV, 0);
                 else if (strncmp(cmd, "ALPHA:", 6) == 0) {
                     float alpha = atof(cmd + 6);
@@ -493,12 +469,8 @@ void IRAM_ATTR controlISR(void* arg)
 
     BaseType_t woken = pdFALSE;
 
-    if (tick % FOC_DIVIDER == 0)
+    if (tick % CONTROL_DIVIDER == 0)
         vTaskNotifyGiveFromISR(focTaskHandle, &woken);
-    if (tick % FBK_DIVIDER == 0)
-        vTaskNotifyGiveFromISR(fbkTaskHandle, &woken);
-    if (tick % DRV_DIVIDER == 0)
-        vTaskNotifyGiveFromISR(drvTaskHandle, &woken);
     if (tick % TELEMETRY_DIVIDER == 0)
         vTaskNotifyGiveFromISR(telemetryTaskHandle, &woken);
     if (included_bmi && tick % BMI_DIVIDER == 0)
