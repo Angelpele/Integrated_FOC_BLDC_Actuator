@@ -80,6 +80,21 @@ class DRV {
         }
 
         void set_spin_duration(float duration_s){ spin_duration = duration_s; }
+        void set_PID_tuning(float parameter, float Kp, float Ki, float Kd){
+            switch (parameter) {
+                case 0: Vel_Kp = Kp; Vel_Ki = Ki; Vel_Kd = Kd; break;
+                case 1: Pos_Kp = Kp; Pos_Ki = Ki; Pos_Kd = Kd; break;
+                case 2: Iq_Kp  = Kp; Iq_Ki = Ki; Iq_Kd = Kd; break;
+                case 3: Id_Kp  = Kp; Id_Ki = Ki; Id_Kd = Kd; break;
+                default: break;
+            }
+        }
+        void set_target_params(float pos, float vel, float torque){
+            target_pos = pos;
+            target_vel = vel;
+            target_current = torque;
+        }
+
         void reset_spin_timer() {
             spin_timer_started = false;
             spin_elapsed = 0.0f;
@@ -90,10 +105,6 @@ class DRV {
         void set_ramp_duration(float duration_s){ ramp_duration = duration_s; }
 
         float reducer_RPM(float motor_RPM){ return motor_RPM / reducer_ratio; }
-
-        void set_alpha(float alpha){ramp_rate = alpha; }
-        void set_beta(float beta){ modulation_index = beta; }
-        void set_teta(float t){ dt = t; }
 
     private: 
         // DRV data
@@ -180,6 +191,14 @@ class DRV {
         float Vel_Ki = 0.1f;
         float Vel_Kd = 0.01f;
         float vel_LPF = 0.8f;
+        float target_vel = 0.0f;
+
+        // Position tunning
+        float Pos_Kp = 1.0f;
+        float Pos_Ki = 0.0f;
+        float Pos_Kd = 0.0f;
+        float Pos_LPF = 0.8f;
+        float target_pos = 0.0f;
 
         // Current tunning
         float Id_LPF = 0.1f;
@@ -188,6 +207,7 @@ class DRV {
         float Id_Kp  = 1.0f;   float Id_Ki = 0.01f;   float Id_Kd = 0.0f;
         float i_d_filt = 0.0f;
         float i_q_filt = 0.0f;
+        float target_current = 0.0f;
         float errorq_prev = 0.0f;
         float errorq_integral = 0.0f;
         float errord_prev = 0.0f;

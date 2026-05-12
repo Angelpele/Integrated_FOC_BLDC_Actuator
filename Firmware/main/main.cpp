@@ -242,7 +242,7 @@ void controlLoop(void* arg){
                         spin_elapsed = drv.openloop_bemf(20.0f, 50.0f);
                         break;
                     case MODE_CLOSED_FOC:
-                        spin_elapsed = drv.foc_control(fbk_pkg.angle, 10.0f);
+                        spin_elapsed = drv.foc_control(fbk_pkg.angle, drv.target_current);
                         break;
                     case MODE_CLOSED_SINUSOIDAL:
                         spin_elapsed = drv.sinusoidal_spin(fbk_pkg.angle, 20.0f);
@@ -325,6 +325,7 @@ void canLoop(void* arg) {
 
             CAN_bus.sendData(slave_pkg, master_id);
             CAN_bus.receiveData(&master_pkg, master_id);
+            drv.set_target_params(master_pkg.pos, master_pkg.vel, master_pkg.torque);
         }
         else{
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
@@ -428,30 +429,38 @@ void telemetryLoop(void* arg) {
                 }
                 else if (strcmp(cmd, "BRAKE") == 0) motion = MOTION_RAMPING_DOWN, drv.request_foc_stop();
                 else if (strcmp(cmd, "STOP") == 0) gpio_set_level(EN_DRV, 0);
-                else if (strncmp(cmd, "ALPHA:", 6) == 0) {
-                    float alpha = atof(cmd + 6);
-                    drv.set_alpha(alpha);
-                    printf("Alpha set to %.3f\n", alpha);
-                    fflush(stdout);
-                }
-                else if (strncmp(cmd, "BETA:", 5) == 0) {
-                    float beta = atof(cmd + 5);
-                    drv.set_beta(beta);
-                    printf("Beta set to %.3f\n", beta);
-                    fflush(stdout);
-                }
-                else if (strncmp(cmd, "TETA:", 5) == 0) {
-                    float teta = atof(cmd + 5);
-                    drv.set_teta(teta);
-                    printf("Teta set to %.3f\n", teta);
-                    fflush(stdout);
-                }
                 else if (strncmp(cmd, "DUR:", 5) == 0) {
                     float duration = atof(cmd + 5);
                     drv.set_ramp_duration(duration);
                     printf("Ramp duration set to %.3f\n", duration);
                     fflush(stdout);
                 }
+                else if (strncmp(cmd, "PID_", 4) == 0) {
+                    char prefix[10];
+                    float Kp = 0.0f, Ki = 0.0f, Kd = 0.0f;
+                    if (sscanf(cmd, "PID_%11[^_]_KP:%f_KI:%f_KD:%f", prefix, &Kp, &Ki, &Kd) == 4) {
+                        float param = -1.0f; // Default to invalid
+                        if      (strcmp(prefix, "VEL") == 0) param = 0.0f;
+                        else if (strcmp(prefix, "POS") == 0) param = 1.0f;
+                        else if (strcmp(prefix, "TORQUE") == 0) param = 2.0f;
+                        else if (strcmp(prefix, "FLUX") == 0) param = 3.0f;
+                        
+                        if (param >= 0.0f) {
+                            drv.set_PID_tuning(param, Kp, Ki, Kd);
+                            printf("%s PID updated: Kp=%.4f Ki=%.4f Kd=%.4f\n", prefix, Kp, Ki, Kd);
+                            fflush(stdout);
+                        }
+                    }
+                else if (strncmp(cmd, "SP_", 4) == 0) {
+                    char sp[10];
+                    float target = 0.0f;
+                    if (sscanf(cmd, "SP_%11[^_]:%f", sp, &target) == 2) {
+                        if      (strcmp(sp, "POS") == 0) drv.set_target_params(target, drv.target_vel, drv.target_current);
+                        else if (strcmp(sp, "VEL") == 0) drv.set_target_params(drv.target_pos, target, drv.target_current);
+                        else if (strcmp(sp, "TOR") == 0) drv.set_target_params(drv.target_pos, drv.target_vel, target);
+                        printf("%s Target updated: %.4f\n", sp, target);
+                        fflush(stdout);
+                    }
                 else if (strcmp(cmd, "FAULT_OVERRIDE_ON") == 0) drv.set_override(true);
                 else if (strcmp(cmd, "FAULT_OVERRIDE_OFF") == 0) drv.set_override(false);
             }
