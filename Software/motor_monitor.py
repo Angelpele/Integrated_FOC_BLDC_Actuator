@@ -147,8 +147,8 @@ class SerialWorker(QThread):
                             self.data_ready.emit({
                                 'ID':      int(parts[0]),
                                 'pvdd':    float(parts[1]),
-                                'i1':      float(parts[2]),
-                                'i2':      float(parts[3]),
+                                'iq':      float(parts[2]),
+                                'id':      float(parts[3]),
                                 'i3':      float(parts[4]),
                                 'a':       float(parts[5]),
                                 'b':       float(parts[6]),
@@ -255,9 +255,9 @@ class PIDRow(QWidget):
 
         self.params = {}   # name -> {slider, val_lbl, spinbox}
         params_cfg = [
-            ("Kp", 0.0, 10.0,  0.01,  "#00d4aa"),
-            ("Ki", 0.0,  5.0,  0.001, "#4e9fff"),
-            ("Kd", 0.0,  2.0,  0.001, "#ffb347"),
+            ("Kp", 0.0, 10.0,  0.001,  "#00d4aa"),
+            ("Ki", 0.0,  100.0,  0.01, "#4e9fff"),
+            ("Kd", 0.0,  20.0,  0.01, "#ffb347"),
         ]
         for row_i, (name, mn, mx, step, pcol) in enumerate(params_cfg):
             lbl = QLabel(f"<b>{name}</b>")
@@ -348,7 +348,7 @@ class MotorMonitor(QMainWindow):
 
         N = PLOT_LEN
         self.buf = {k: collections.deque([0.0]*N, maxlen=N) for k in
-                    ['pvdd','i1','i2','i3','m_rpm','red_rpm','ntc','m_ang',
+                    ['pvdd','iq','id','i3','m_rpm','red_rpm','ntc','m_ang',
                      'red_ang','a','b','c',
                      'sp_pos','sp_vel','sp_torque']}
         self.x = np.arange(N)
@@ -612,8 +612,8 @@ class MotorMonitor(QMainWindow):
 
         # Torque / current plot
         pw_tor, crv3 = make_plot("Torque (Phase Current)", "A",
-                                 ['#ffb347', '#ffb34755'])
-        crv3[0].setData(name="Measured  I1")
+                                 ['#ffb347', '#ffb34755', '#4e9fff'])
+        crv3[0].setData(name="Measured  iq")
         crv3[1].setData(name="Setpoint")
         crv3[1].setPen(pg.mkPen('#ffb347', width=1.5, style=Qt.PenStyle.DashLine))
         self.crv_ctrl_tor = crv3
@@ -631,14 +631,14 @@ class MotorMonitor(QMainWindow):
 
         grid = QWidget(); g = QGridLayout(grid); g.setSpacing(10)
         self.card_pvdd   = MetricCard("PVDD",        "V",   warn=16, danger=18)
-        self.card_i1     = MetricCard("Current 1",   "A",   warn=20, danger=35)
-        self.card_i2     = MetricCard("Current 2",   "A",   warn=20, danger=35)
+        self.card_iq     = MetricCard("Current Q",   "A",   warn=20, danger=35)
+        self.card_id     = MetricCard("Current D",   "A",   warn=20, danger=35)
         self.card_i3     = MetricCard("Current 3",   "A",   warn=20, danger=35)
         self.card_rpm    = MetricCard("Motor RPM",   "rpm")
         self.card_redrpm = MetricCard("Reducer RPM", "rpm")
         self.card_ntc    = MetricCard("Temperature", "°C",  warn=60, danger=80)
         self.card_state  = MetricCard("State")
-        for i, c in enumerate([self.card_pvdd, self.card_i1, self.card_i2, self.card_i3,
+        for i, c in enumerate([self.card_pvdd, self.card_iq, self.card_id, self.card_i3,
                                 self.card_rpm, self.card_redrpm, self.card_ntc, self.card_state]):
             g.addWidget(c, i // 4, i % 4)
         v.addWidget(grid)
@@ -667,8 +667,8 @@ class MotorMonitor(QMainWindow):
         w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(16, 16, 16, 16)
         pw1, self.crv_cur = make_plot("Phase Currents", "Amps",
                                       ['#ff4d6d','#ffb347','#4e9fff'])
-        self.crv_cur[0].setData(name="I1")
-        self.crv_cur[1].setData(name="I2")
+        self.crv_cur[0].setData(name="iq")
+        self.crv_cur[1].setData(name="id")
         self.crv_cur[2].setData(name="I3")
         pw2, self.crv_raw = make_plot("ADC Phases (A, B, C)", "raw",
                                       ['#ff4d6d','#4e9fff','#00d4aa'])
@@ -799,7 +799,7 @@ class MotorMonitor(QMainWindow):
 
     # ─── DATA ─────────────────────────────────────────────────
     def _on_data(self, d):
-        for k in ['pvdd','i1','i2','i3','m_rpm','red_rpm','ntc','m_ang','red_ang','a','b','c']:
+        for k in ['pvdd','iq','id','i3','m_rpm','red_rpm','ntc','m_ang','red_ang','a','b','c']:
             if k in d:
                 self.buf[k].append(d[k])
 
@@ -810,8 +810,8 @@ class MotorMonitor(QMainWindow):
 
         # Dashboard cards
         self.card_pvdd.update(d['pvdd'],      ".2f")
-        self.card_i1.update(abs(d['i1']),     ".2f")
-        self.card_i2.update(abs(d['i2']),     ".2f")
+        self.card_iq.update(abs(d['iq']),     ".2f")
+        self.card_id.update(abs(d['id']),     ".2f")
         self.card_i3.update(abs(d['i3']),     ".2f")
         self.card_rpm.update(d['m_rpm'],      ".1f")
         self.card_redrpm.update(d['red_rpm'], ".2f")
@@ -834,7 +834,7 @@ class MotorMonitor(QMainWindow):
         if self.recording and self.rec_writer:
             self.rec_writer.writerow([
                 datetime.utcnow().isoformat(),
-                d['pvdd'], d['i1'], d['i2'], d['i3'],
+                d['pvdd'], d['iq'], d['id'], d['i3'],
                 d['a'], d['b'], d['c'],
                 d['nfault'], d['noctw'], d['ntc'],
                 d['m_ang'], d['red_ang'],
@@ -867,19 +867,20 @@ class MotorMonitor(QMainWindow):
         self.crv_ctrl_pos[0].setData(x, arr['red_ang'])
         self.crv_ctrl_pos[1].setData(x, arr['sp_pos'])
 
-        self.crv_ctrl_vel[0].setData(x, arr['red_rpm'])
+        self.crv_ctrl_vel[0].setData(x, arr['m_rpm'])
         self.crv_ctrl_vel[1].setData(x, arr['sp_vel'])
 
-        self.crv_ctrl_tor[0].setData(x, arr['i1'])
+        self.crv_ctrl_tor[0].setData(x, arr['iq'])
         self.crv_ctrl_tor[1].setData(x, arr['sp_torque'])
+        self.crv_ctrl_tor[2].setData(x, arr['id'])
 
         # ── Dashboard ─────────────────────────────────────────
         self.crv_dash_rpm[0].setData(x, arr['m_rpm'])
         self.crv_dash_rpm[1].setData(x, arr['red_rpm'])
 
         # ── Currents ──────────────────────────────────────────
-        self.crv_cur[0].setData(x, arr['i1'])
-        self.crv_cur[1].setData(x, arr['i2'])
+        self.crv_cur[0].setData(x, arr['iq'])
+        self.crv_cur[1].setData(x, arr['id'])
         self.crv_cur[2].setData(x, arr['i3'])
         self.crv_raw[0].setData(x, arr['a'])
         self.crv_raw[1].setData(x, arr['b'])
@@ -907,7 +908,7 @@ class MotorMonitor(QMainWindow):
             self.rec_file   = open(path, 'w', newline='')
             self.rec_writer = csv.writer(self.rec_file)
             self.rec_writer.writerow([
-                'timestamp','pvdd','i1','i2','i3',
+                'timestamp','pvdd','iq','id','i3',
                 'a','b','c','nfault','noctw','ntc',
                 'm_ang','red_ang','m_rpm','red_rpm',
                 'sp_pos','sp_vel','sp_torque'

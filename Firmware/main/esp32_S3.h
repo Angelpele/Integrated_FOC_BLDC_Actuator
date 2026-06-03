@@ -107,6 +107,12 @@ enum ControlMode {
     MODE_CLOSED_SINUSOIDAL
 };
 
+enum ClosedMode {
+    MODE_VEL,
+    MODE_POS,
+    MODE_TORQUE
+};
+
 #pragma pack(push, 1)
 typedef struct {
     uint8_t ID;
@@ -160,6 +166,7 @@ typedef struct {
 
 typedef struct {
     float angle;
+    float reducer_angle;
     uint8_t status;
 } angle_data;
     
@@ -182,7 +189,7 @@ typedef struct {
 #define CONTROL_DIVIDER        1    //20khz (max 200 khz)
 #define BMI_DIVIDER        20   //1khz
 #define CAN_DIVIDER        5   //4kHz 
-#define TELEMETRY_DIVIDER  1000  // 20hz
+#define TELEMETRY_DIVIDER  500  // 40hz
 
 #endif
 

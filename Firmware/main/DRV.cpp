@@ -111,12 +111,14 @@ DRV_data DRV::getdata() {
     package.A = adc1_get_raw(A_SENSE)*voltage_gain;
     package.B = adc1_get_raw(B_SENSE)*voltage_gain;
     package.C = adc1_get_raw(C_SENSE)*voltage_gain;
-    SO1_raw = adc1_get_raw(SO1);
-    SO2_raw = adc1_get_raw(SO2);
+    //SO1_raw = adc1_get_raw(SO1);
+    //SO2_raw = adc1_get_raw(SO2);
     //SO1_raw = 0;
     //SO2_raw = 0;
-    package.current1 = (float)(SO1_offset - SO1_raw) * voltage_step / (current_gain * R_shunt);
-    package.current2 = (float)(SO2_offset - SO2_raw) * voltage_step / (current_gain * R_shunt);
+    //package.current1 = (float)(SO1_offset - SO1_raw) * voltage_step / (current_gain * R_shunt);
+    //package.current2 = (float)(SO2_offset - SO2_raw) * voltage_step / (current_gain * R_shunt);
+    package.current1 = i_q_filt;
+    package.current2 = i_d_filt;
     
     // ---- ADC2 ----
     adc2_get_raw(PVDD_SENSE, ADC_WIDTH_BIT_12, &PVDD_raw);
@@ -207,16 +209,33 @@ void DRV::setup_mcpwm() {
 
 bool DRV::svpwm(float v_a, float v_b, float v_c) {
     // Space Vector PWM implementation
-    float Vmax = fmaxf(fmaxf(fabsf(v_a), fabsf(v_b)), fabsf(v_c));
-    if (Vmax > 1.0f) {
-        v_a /= Vmax;
-        v_b /= Vmax;
-        v_c /= Vmax;
-    }
+    // v_a/v_b/v_c are phase voltages relative to the DC midpoint [Volts].
 
-    float duty_a = (v_a + 1.0f) * 50.0f;
-    float duty_b = (v_b + 1.0f) * 50.0f;
-    float duty_c = (v_c + 1.0f) * 50.0f;
+    int raw_pvdd = 0;
+    adc2_get_raw(PVDD_SENSE, ADC_WIDTH_BIT_12, &raw_pvdd);
+    float v_bus = getPVDD(raw_pvdd);
+    if (v_bus < 4.0f) v_bus = 4.0f;     // safety floor – avoids /0 at startup
+    float v_half = v_bus * 0.5f;
+
+    //Third-harmonic (min-max) zero-sequence injection
+    float v_min = fminf(fminf(v_a, v_b), v_c);
+    float v_max = fmaxf(fmaxf(v_a, v_b), v_c);
+    float v_zero = -0.5f * (v_max + v_min);   // centred zero-sequence
+
+    v_a += v_zero;
+    v_b += v_zero;
+    v_c += v_zero;
+
+    // Clamp to ±v_half to avoid saturation (should not happen after voltage
+    // clamping in foc_control, but kept as a hard guard)
+    v_a = fmaxf(-v_half, fminf(v_half, v_a));
+    v_b = fmaxf(-v_half, fminf(v_half, v_b));
+    v_c = fmaxf(-v_half, fminf(v_half, v_c));
+
+
+    float duty_a = (v_a / v_half + 1.0f) * 50.0f;
+    float duty_b = (v_b / v_half + 1.0f) * 50.0f;
+    float duty_c = (v_c / v_half + 1.0f) * 50.0f;
 
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty_a);
     mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100.0f - duty_a);
@@ -229,21 +248,16 @@ bool DRV::svpwm(float v_a, float v_b, float v_c) {
 
 AlignOffset DRV::align(float angle) {
     AlignOffset result = {false, 0.0f};
-
-    float duty = (align_time < ramp_duration) ? (align_time / ramp_duration) * ALIGN_DUTY : ALIGN_DUTY;
-
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_A, duty);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_OPR_B, 100.0f - duty);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_A, 0.0f);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_OPR_B, 100.0f);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_A, 0.0f);
-    mcpwm_set_duty(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_OPR_B, 100.0f);
+    float align_voltage = (align_time < ramp_duration) ? (align_time / ramp_duration) * 3.0f : 3.0f;
+    
+    svpwm(align_voltage, -align_voltage / 2.0f, -align_voltage / 2.0f);
+    
     align_time += dt;
 
     if (align_time >= ALIGN_DURATION) {
-
         float theta_mag = angle * (M_PI / 180.0f);
-        elec_offset = -theta_mag * (float)MOTOR_POLE_PAIRS;
+        
+        elec_offset = - (theta_mag * (float)MOTOR_POLE_PAIRS);
 
         while (elec_offset >  M_PI) elec_offset -= 2.0f * M_PI;
         while (elec_offset < -M_PI) elec_offset += 2.0f * M_PI;
@@ -252,10 +266,11 @@ AlignOffset DRV::align(float angle) {
         align_time = 0.0f; 
 
         printf("Alignment done. Angle: %.2f deg | elec_offset: %.4f rad\n", angle, elec_offset);
-
+        
         result.done = true;
         result.elec_offset = elec_offset;
     }
+    just_aligned = true;
     esp_task_wdt_reset();
     return result;
 }
@@ -375,7 +390,7 @@ bool DRV::sinusoidal_spin(float fbk_angle, float freq) {
     return false;
 }
 
-bool DRV::foc_control(float fbk_angle, float target_current)
+bool DRV::foc_control(float fbk_angle)
 {
     if (foc_stop) {
         reset_foc();
@@ -384,8 +399,9 @@ bool DRV::foc_control(float fbk_angle, float target_current)
 
     float now = (float)esp_timer_get_time() * 1e-6f;
     if (!foc_initialized) {
-        foc_prev_time   = now;
+        reset_foc();
         foc_initialized = true;
+        foc_prev_time   = now;
         return false; 
     }
 
@@ -393,30 +409,47 @@ bool DRV::foc_control(float fbk_angle, float target_current)
     if (dt <= 0.0f || dt > 0.1f) dt = 0.000050f;  // clamp to 50µs
 
     // Current sensing
-    SO1_raw = adc1_get_raw(SO1);
-    SO2_raw = adc1_get_raw(SO2);
-    float current1 = (float)(SO1_offset - SO1_raw) * voltage_step / (current_gain * R_shunt);
-    float current2 = (float)(SO2_offset - SO2_raw) * voltage_step / (current_gain * R_shunt);
+    int raw1 = adc1_get_raw(SO1);
+    if (raw1 >= 0) SO1_raw = raw1;
+    int raw2 = adc1_get_raw(SO2);
+    if (raw2 >= 0) SO2_raw = raw2;
+    
+    float i_a = (float)(SO1_raw - SO1_offset) * voltage_step / (current_gain * R_shunt);
+    float i_b = (float)(SO2_raw - SO2_offset) * voltage_step / (current_gain * R_shunt);
 
     // Mechanical angle to electrical angle
-    float theta = fbk_angle * (M_PI / 180.0f) * (float)MOTOR_POLE_PAIRS;
-    theta = fmodf(theta, 2.0f * M_PI);
+    float theta_raw = fbk_angle * (M_PI / 180.0f);
+    float theta = fmodf(theta_raw * (float)MOTOR_POLE_PAIRS + elec_offset, 2.0f * M_PI);
     if (theta < 0.0f) theta += 2.0f * M_PI;
+
+    if (just_aligned){
+        printf("Check: theta after align = %.3f (should be ~0)\n", theta);
+        just_aligned = false;
+    }
+    static int debug_count = 0;
+    if (debug_count < 10) {
+        float theta_raw = fbk_angle * (M_PI / 180.0f);
+        float theta_check = fmodf(theta_raw * (float)MOTOR_POLE_PAIRS + elec_offset, 2.0f * M_PI);
+        printf("FOC debug: fbk_angle=%.2f elec_offset=%.4f theta=%.3f\n", 
+               fbk_angle, elec_offset, theta_check);
+        debug_count++;
+    }
+
 
     float cos_t = cosf(theta);
     float sin_t = sinf(theta);
 
     // Clarke transform (2 sensors, balanced 3 phase assumed)
-    float i_alpha =  current1;
-    float i_beta  = (current1 + 2.0f * current2) / sqrtf(3.0f);
+    float i_alpha =  i_a;
+    float i_beta  = (i_a + 2.0f * i_b) * (1.0f / 1.7320508f);  // Divide by sqrt(3)
 
     // Park transform
     float i_d =  i_alpha * cos_t + i_beta * sin_t;
     float i_q = -i_alpha * sin_t + i_beta * cos_t;
 
     // Low-pass filter
-    i_d_filt = i_d_filt * (1.0f - Id_LPF) + Id_LPF * i_d;
-    i_q_filt = i_q_filt * (1.0f - Iq_LPF) + Iq_LPF * i_q;
+    i_d_filt += Id_LPF * (i_d - i_d_filt);
+    i_q_filt += Iq_LPF * (i_q - i_q_filt);
 
     // Current errors
     float error_q = target_current - i_q_filt;
@@ -426,23 +459,34 @@ bool DRV::foc_control(float fbk_angle, float target_current)
     errorq_integral += error_q * dt;
     errord_integral += error_d * dt;
 
-    // Anti windup clamp, avoid saturation
-    errorq_integral = fmaxf(-overvoltage, fminf(overvoltage, errorq_integral));
-    errord_integral = fmaxf(-overvoltage, fminf(overvoltage, errord_integral));
+    int raw_pvdd = 0;
+    adc2_get_raw(PVDD_SENSE, ADC_WIDTH_BIT_12, &raw_pvdd);
+    float v_bus   = getPVDD(raw_pvdd);
+    if (v_bus < 4.0f) v_bus = 4.0f;
+    // Maximum phase voltage magnitude = V_bus / sqrt(3)  (SVPWM limit)
+    float v_limit = fminf(v_bus / sqrtf(3.0f), overvoltage);
+
+    // Anti-windup clamp on integrals
+    float int_limit_q = v_limit / (Iq_Ki + 1e-9f);
+    float int_limit_d = v_limit / (Id_Ki + 1e-9f);
+    errorq_integral = fmaxf(-int_limit_q, fminf(int_limit_q, errorq_integral));
+    errord_integral = fmaxf(-int_limit_d, fminf(int_limit_d, errord_integral));
 
     // PID
     float v_q = Iq_Kp * error_q + Iq_Ki * errorq_integral + Iq_Kd * (error_q - errorq_prev) / dt;
     float v_d = Id_Kp * error_d + Id_Ki * errord_integral + Id_Kd * (error_d - errord_prev) / dt;
 
+    float v_dq_mag = sqrtf(v_d * v_d + v_q * v_q);
+    if (v_dq_mag > v_limit) {
+        float scale = v_limit / v_dq_mag;
+        v_d *= scale;
+        v_q *= scale;
+    }
+
     // Update state for next cycle
     foc_prev_time = now;
     errorq_prev   = error_q;
     errord_prev   = error_d;
-
-    // Voltage clamp
-    float v_limit = fminf(modulation_index * getPVDD(PVDD_raw) / sqrtf(3.0f), overvoltage);
-    v_q = fmaxf(-v_limit, fminf(v_limit, v_q));
-    v_d = fmaxf(-v_limit, fminf(v_limit, v_d));
 
     // Inverse Park
     float v_alpha = v_d * cos_t - v_q * sin_t;
@@ -454,6 +498,69 @@ bool DRV::foc_control(float fbk_angle, float target_current)
     float v_c = -0.5f * v_alpha - (sqrtf(3.0f) / 2.0f) * v_beta;
 
     return svpwm(v_a, v_b, v_c);
+}
+
+float DRV::velocity_loop (float fbk_rpm) {
+    float now_vel = (float)esp_timer_get_time() * 1e-6f;
+    if (!vel_initialized) {
+        reset_vel_loop();
+        vel_initialized = true;
+        vel_prev_time = now_vel;
+        return false; 
+    }
+
+    float dt_vel = now_vel - vel_prev_time;
+    if (dt_vel <= 0.0f) return target_current;
+    
+    fbk_rpm_filt = fbk_rpm_filt + Vel_LPF * (fbk_rpm - fbk_rpm_filt);
+    
+    float d_error = target_vel - fbk_rpm_filt;
+    vel_error_integral += d_error * dt_vel;
+
+    // Anti-windup
+    float int_limit = VEL_OUT_MAX / (Vel_Ki + 1e-9f); // Prevent integral from commanding more than max current
+    vel_error_integral = fmaxf(-int_limit, fminf(int_limit, vel_error_integral));
+
+    float output = Vel_Kp * d_error + Vel_Ki * vel_error_integral + Vel_Kd * (d_error - vel_error_prev) / dt_vel;
+    output = fmaxf(-VEL_OUT_MAX, fminf(VEL_OUT_MAX, output)); // Clamp to max current
+    vel_error_prev = d_error;
+    vel_prev_time = now_vel;
+    target_current = output; // Feed velocity controller output to current loop as target
+    return output;
+}
+
+float DRV::position_loop(float fbk_angle_deg) {
+    float now_pos = (float)esp_timer_get_time() * 1e-6f;
+    if (!pos_initialized) {
+        reset_pos_loop();
+        pos_initialized = true;
+        pos_prev_time = now_pos;
+        return false; 
+    }
+
+    float dt_pos = now_pos - pos_prev_time;
+    if (dt_pos <= 0.0f || dt_pos > 0.5f){
+        pos_prev_time = now_pos;
+        return target_vel;
+    } 
+
+    float raw_error = target_pos - fbk_angle_deg;
+    if (raw_error > 180.0f) raw_error -= 360.0f;
+    if (raw_error < -180.0f) raw_error += 360.0f;
+    
+    pos_error_filt += Pos_LPF * (raw_error - pos_error_filt);
+
+    pos_error_integral += pos_error_filt * dt_pos;
+
+    // Anti-windup
+    float int_limit = POS_OUT_MAX / (Pos_Ki + 1e-9f); // 
+    pos_error_integral = fmaxf(-int_limit, fminf(int_limit, pos_error_integral));
+
+    float output = Pos_Kp * pos_error_filt + Pos_Ki * pos_error_integral + Pos_Kd * (pos_error_filt - pos_error_prev) / dt_pos;
+    pos_error_prev = pos_error_filt;
+    pos_prev_time = now_pos;
+    target_vel = output; // Feed position controller output to velocity loop as target
+    return output;
 }
 
 bool DRV::openloop_bemf(float target_freq, float duty) {
@@ -633,10 +740,13 @@ float DRV::real_RPM(float angle_deg) {
     int64_t dt_us  = now_us - rpm_last_time;
 
     // Initialize rpm filter
-    if (rpm_last_time == 0 || dt_us < RPM_MIN_DT_US) {
+    if (rpm_last_time == 0) {
         rpm_last_time  = now_us;
         rpm_last_angle = angle_deg;
         return rpm_filtered;
+    }
+    if (dt_us < RPM_MIN_DT_US) {
+        return rpm_filtered; 
     }
 
     // Wrap angular delta between -180 and +180

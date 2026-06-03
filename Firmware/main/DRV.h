@@ -48,7 +48,11 @@ class DRV {
         AlignOffset align(float angle);
         bool ramp(float angle, float init_freq, float obj_freq);
         bool sinusoidal_spin(float fbk_angle, float freq);
-        bool foc_control(float fbk_angle, float target_current);
+        bool foc_control(float fbk_angle);
+
+        float position_loop(float fbk_angle_deg);
+        float velocity_loop(float fbk_rpm);
+
         void request_foc_stop() { foc_stop = true; }
         void reset_foc() {
             i_d_filt = 0.0f; i_q_filt = 0.0f;
@@ -56,6 +60,19 @@ class DRV {
             errorq_integral = 0.0f; errord_integral = 0.0f;
             foc_initialized = false;
             foc_stop = false;
+        }
+        void reset_pos_loop() {
+            pos_error_integral = 0.0f;
+            pos_error_prev = 0.0f;
+            pos_error_filt = 0.0f;
+            pos_initialized = false;
+            pos_prev_time = 0.0f;
+        }
+        void reset_vel_loop() {
+            vel_error_integral = 0.0f;
+            vel_error_prev     = 0.0f;
+            vel_initialized = false;
+            vel_prev_time = 0.0f;
         }
         bool openloop_bemf(float target_freq, float duty);
         void brake();
@@ -70,9 +87,11 @@ class DRV {
                 printf("DRV FAULT OVERRIDE DISABLED\n");
         }
 
+        float get_last_rpm() const { return last_rpm; }
+        float update_rpm (float angle){ last_rpm = real_RPM(angle); return last_rpm;}
         float getPVDD(int PVDD_raw){
             float R_frac = 11;  // 100k + 10k / 10k
-            return (float)PVDD_raw * 3.3 / 4095 * R_frac;
+            return (float)PVDD_raw * 3.3 / 4095 * R_frac + V_offset;
         }
 
         void set_MOC(bool state){
@@ -80,7 +99,7 @@ class DRV {
         }
 
         void set_spin_duration(float duration_s){ spin_duration = duration_s; }
-        void set_PID_tuning(float parameter, float Kp, float Ki, float Kd){
+        void set_PID_tuning(uint8_t parameter, float Kp, float Ki, float Kd){
             switch (parameter) {
                 case 0: Vel_Kp = Kp; Vel_Ki = Ki; Vel_Kd = Kd; break;
                 case 1: Pos_Kp = Kp; Pos_Ki = Ki; Pos_Kd = Kd; break;
@@ -89,11 +108,9 @@ class DRV {
                 default: break;
             }
         }
-        void set_target_params(float pos, float vel, float torque){
-            target_pos = pos;
-            target_vel = vel;
-            target_current = torque;
-        }
+        void set_target_pos(float pos)       { target_pos = pos; }
+        void set_target_vel(float vel)       { target_vel = vel; }
+        void set_target_torque(float torque) { target_current = torque; }
 
         void reset_spin_timer() {
             spin_timer_started = false;
@@ -101,6 +118,9 @@ class DRV {
             theta_reset = true;
             phase_accumulator = 0.0f;     
             electrical_freq = 2.0f;        
+            rpm_last_time = 0;
+            ramp_active = false;
+            align_time = 0.0f;
         }
         void set_ramp_duration(float duration_s){ ramp_duration = duration_s; }
 
@@ -113,6 +133,7 @@ class DRV {
         uint16_t NFAULT_raw = 0;
         uint16_t NOCTW_raw = 0;
         int PVDD_raw = 0;
+        float V_offset = 1.1f; // Voltage offset
 
         // DRV parameters
         float R_shunt = 0.01;
@@ -147,8 +168,8 @@ class DRV {
         bool aligned = false;
         float offset = 0.0;
         float align_time = 0.0;
-        float ALIGN_DURATION = 1.0f;   // 1000 ms
-        float ALIGN_DUTY = 15.0f;
+        float ALIGN_DURATION = 0.5f;   // 1500 ms
+        float ALIGN_DUTY = 30.0f;
 
         // Waveform generation
         uint32_t PWM_freq = 40000; // 40 kHz carrier frequency for MCPWM
@@ -180,6 +201,7 @@ class DRV {
         float   rpm_last_angle  = 0.0f;
         int64_t rpm_last_time   = 0;
         float   rpm_filtered    = 0.0f;
+        float last_rpm = 0.0f;
         
         float CLOSED_LOOP_LPF = 1.0f;  // 1.0 = no filtering for mag
         float RPM_LPF      = 0.80f;    // 0.3 for fast speeds, 0.8 for slow speeds
@@ -187,24 +209,24 @@ class DRV {
         static constexpr int64_t RPM_MIN_DT_US    = 100;    // guard against /0 on first call
 
         // Velocity tunning
-        float Vel_Kp = 0.5f;
-        float Vel_Ki = 0.1f;
-        float Vel_Kd = 0.01f;
-        float vel_LPF = 0.8f;
+        float Vel_Kp = 0.002f;
+        float Vel_Ki = 0.008f;
+        float Vel_Kd = 0.0f;
+        float Vel_LPF = 0.05f;
         float target_vel = 0.0f;
 
         // Position tunning
         float Pos_Kp = 1.0f;
         float Pos_Ki = 0.0f;
         float Pos_Kd = 0.0f;
-        float Pos_LPF = 0.8f;
+        float Pos_LPF = 0.5f;
         float target_pos = 0.0f;
 
         // Current tunning
-        float Id_LPF = 0.1f;
-        float Iq_LPF = 0.1f;
-        float Iq_Kp  = 1.0f;   float Iq_Ki = 0.01f;   float Iq_Kd = 0.0f;
-        float Id_Kp  = 1.0f;   float Id_Ki = 0.01f;   float Id_Kd = 0.0f;
+        float Id_LPF = 0.2f;
+        float Iq_LPF = 0.2f;
+        float Iq_Kp  = 0.05f;   float Iq_Ki = 200.0f;   float Iq_Kd = 0.0f;
+        float Id_Kp  = 0.05f;   float Id_Ki = 200.0f;   float Id_Kd = 0.0f;
         float i_d_filt = 0.0f;
         float i_q_filt = 0.0f;
         float target_current = 0.0f;
@@ -214,10 +236,28 @@ class DRV {
         float errord_integral = 0.0f;
         float foc_prev_time = 0.0f;
         bool foc_initialized = false;
+        bool just_aligned = true;
         bool foc_stop = false;
 
+        // Position loop state
+        float pos_error_integral = 0.0f;
+        float pos_error_filt = 0.0f;
+        float pos_error_prev = 0.0f;
+        float pos_prev_time = 0.0f;
+        bool pos_initialized = false;
 
-        
+        // Velocity loop state
+        float vel_error_integral = 0.0f;
+        float fbk_rpm_filt = 0.0f;
+        float vel_error_prev = 0.0f;
+        float vel_prev_time = 0.0f;
+        bool vel_initialized = false;
+
+        // Velocity loop output clamp (Amps)
+        static constexpr float VEL_OUT_MAX = 10.0f;
+        // Position loop output clamp (RPM)
+        static constexpr float POS_OUT_MAX = 1000.0f;
+
     };
 
 class NTC_sensor {

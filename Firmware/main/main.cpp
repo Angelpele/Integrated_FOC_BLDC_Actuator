@@ -8,7 +8,6 @@
 volatile uint32_t isr_counter = 0;
 
 TaskHandle_t focTaskHandle = NULL;
-TaskHandle_t fbkTaskHandle = NULL;
 TaskHandle_t bmiTaskHandle = NULL;
 TaskHandle_t drvTaskHandle = NULL;
 TaskHandle_t telemetryTaskHandle = NULL;
@@ -46,10 +45,12 @@ SystemState system_state = SYSTEM_INIT;
 DRV_MotionState motion = MOTION_IDLE;
 FeedbackSys fbk_sys = MAG;
 ControlMode control_mode = MODE_CLOSED_FOC;
+ClosedMode closed_mode = MODE_VEL;
 
 bool debug_mode_enabled = true;
 bool included_bmi = false;
 bool slave_motor = true;
+bool CAN_enabled = false;
 uint8_t motor_dest_id = 1; 
 uint8_t master_id = 0;
 
@@ -142,8 +143,10 @@ int initialize() {
         }
     }
 
-    if (CAN_bus.init() != 0) {
-        status |= 8;
+    if (CAN_enabled) {
+        if (CAN_bus.init() != 0) {
+            status |= 8;
+        }
     }
     return status; 
 }
@@ -199,24 +202,33 @@ void create_tasks_once() {
 void controlLoop(void* arg){
     esp_task_wdt_add(NULL);  // Subscribe to watchdog
 
+    float local_angle = 0.0f;
+    float local_reducer_angle = 0.0f;
+    float local_rpm = 0.0f;
+
     while(true){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         if (fbk_sys == MAG) {
             mag_data temp = mag.getdata();
+            local_angle = temp.angle;
+            local_rpm = drv.update_rpm(local_angle); // single call
+            local_reducer_angle = drv.reducer_angle(local_angle);
+
             xSemaphoreTake(fbk_mutex, portMAX_DELAY);
                 fbk_pkg.angle = temp.angle;
                 fbk_pkg.status = temp.status;
+                fbk_pkg.reducer_angle = local_reducer_angle;
             xSemaphoreGive(fbk_mutex);
         }
-
+        
         else if (fbk_sys == HALL) {
             // future implementation of Hall sensor
         }
-
+        
         switch (motion) {
             case MOTION_STARTUP:
-                if (drv.align(fbk_pkg.angle).done) {
-                    motion = MOTION_RAMPING;
+                if (drv.align(local_angle).done) {
+                    motion = MOTION_SPINNING;
                 }
                 break;
 
@@ -227,7 +239,7 @@ void controlLoop(void* arg){
                     drv.reset_spin_timer();
                     ramp_reset_done = true;
                 }
-                if (drv.ramp(fbk_pkg.angle, 2.0f, 20.0f)) {
+                if (drv.ramp(local_angle, 2.0f, 20.0f)) {
                     ramp_reset_done = false;   // reset for next ramp
                     motion = MOTION_SPINNING;
                 }
@@ -236,26 +248,38 @@ void controlLoop(void* arg){
 
             case MOTION_SPINNING:
             {
-                bool spin_elapsed = false;
                 switch (control_mode) {
-                    case MODE_OPENLOOP_BEMF:
-                        spin_elapsed = drv.openloop_bemf(20.0f, 50.0f);
-                        break;
                     case MODE_CLOSED_FOC:
-                        spin_elapsed = drv.foc_control(fbk_pkg.angle, drv.target_current);
+                        switch (closed_mode) {
+                            case MODE_TORQUE:
+                                drv.foc_control(local_angle);
+                                break;
+                            case MODE_VEL:
+                                drv.velocity_loop(local_rpm);
+                                drv.foc_control(local_angle);
+                                break;
+                            case MODE_POS:
+                                drv.position_loop(local_reducer_angle);
+                                drv.velocity_loop(local_rpm);
+                                drv.foc_control(local_angle);
+                                break;
+                            default: break;
+                        }
                         break;
+
+                    case MODE_OPENLOOP_BEMF:
+                        drv.openloop_bemf(20.0f, 50.0f);
+                        break;
+
                     case MODE_CLOSED_SINUSOIDAL:
-                        spin_elapsed = drv.sinusoidal_spin(fbk_pkg.angle, 20.0f);
+                        drv.sinusoidal_spin(local_angle, 20.0f);
                         break;
                     default: break;
-                }
-                if (spin_elapsed) {
-                    motion = MOTION_IDLE;
                 }
                 break;
             }
             case MOTION_RAMPING_DOWN:
-                if (drv.ramp(fbk_pkg.angle, 10.0f, 0.5f))   //Target freq and final freq
+                if (drv.ramp(local_angle, 10.0f, 0.5f))   //Target freq and final freq
                     motion = MOTION_IDLE;
                 break;
 
@@ -266,18 +290,6 @@ void controlLoop(void* arg){
             default: break;
         }
         esp_task_wdt_reset();
-    }
-}
-
-void fbkLoop(void* arg) {
-    esp_task_wdt_add(NULL);
-    while (true) {
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-        
-
-        esp_task_wdt_reset();
-        taskYIELD();
     }
 }
 
@@ -299,44 +311,49 @@ void bmiLoop(void* arg) {
 }
 
 void canLoop(void* arg) {
-    esp_task_wdt_add(NULL);
-    while (true) {
-        if(slave_motor){
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-            DRV_data td;
-            angle_data tm;
-            BMI_data tb;
+    //esp_task_wdt_add(NULL);
+    if(CAN_enabled){
+        while (true) {
+            if(slave_motor){
+                ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+                DRV_data td;
+                angle_data tm;
+                BMI_data tb;
 
-            if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
-                td = drv.getdata();
-                xSemaphoreGive(drv_mutex);
-            } if (xSemaphoreTake(fbk_mutex, portMAX_DELAY) == pdTRUE) {
-                tm = fbk_pkg;
-                xSemaphoreGive(fbk_mutex);
+                if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
+                    td = drv.getdata();
+                    xSemaphoreGive(drv_mutex);
+                } if (xSemaphoreTake(fbk_mutex, portMAX_DELAY) == pdTRUE) {
+                    tm = fbk_pkg;
+                    xSemaphoreGive(fbk_mutex);
+                }
+                slave_pkg.ID = MOTOR_ID;
+                slave_pkg.pvdd = td.PVDD;
+                slave_pkg.temp = td.temperature;
+                slave_pkg.red_angle = tm.reducer_angle;
+                slave_pkg.red_rpm = drv.reducer_RPM(drv.get_last_rpm());
+                slave_pkg.nfault = td.NFAULT_raw;
+                slave_pkg.oc = td.NOCTW_raw;
+
+                CAN_bus.sendData(slave_pkg, master_id);
+                CAN_bus.receiveData(&master_pkg, master_id);
+                drv.set_target_pos(master_pkg.pos);
+                drv.set_target_vel(master_pkg.vel);
+                drv.set_target_torque(master_pkg.torque);
             }
-            float motor_rpm = drv.real_RPM(tm.angle);
-            slave_pkg.ID = MOTOR_ID;
-            slave_pkg.pvdd = td.PVDD;
-            slave_pkg.temp = td.temperature;
-            slave_pkg.red_angle = drv.reducer_angle(tm.angle);
-            slave_pkg.red_rpm = drv.reducer_RPM(motor_rpm);
-            slave_pkg.nfault = td.NFAULT_raw;
-            slave_pkg.oc = td.NOCTW_raw;
+            else{
+                ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+                master_pkg.ID = MOTOR_ID;
+                master_pkg.pos = 0.0f;
+                master_pkg.vel = 0.0f; 
+                master_pkg.torque = 0.0f; 
 
-            CAN_bus.sendData(slave_pkg, master_id);
-            CAN_bus.receiveData(&master_pkg, master_id);
-            drv.set_target_params(master_pkg.pos, master_pkg.vel, master_pkg.torque);
+                CAN_bus.sendData(master_pkg, motor_dest_id);
+            }
+            //esp_task_wdt_reset();
         }
-        else{
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-            master_pkg.ID = MOTOR_ID;
-            master_pkg.pos = 0.0f;
-            master_pkg.vel = 0.0f; 
-            master_pkg.torque = 0.0f; 
-
-            CAN_bus.sendData(master_pkg, motor_dest_id);
-        }
-        esp_task_wdt_reset();
+    } else {
+        vTaskDelete(NULL);          //Delete task if CAN not enabled
     }
 }
 
@@ -362,7 +379,6 @@ void telemetryLoop(void* arg) {
             tb = bmi_pkg;
             xSemaphoreGive(bmi_mutex);
         }
-        float motor_rpm = drv.real_RPM(tm.angle);
 
         int len = snprintf(
             buf, sizeof(buf),
@@ -379,9 +395,9 @@ void telemetryLoop(void* arg) {
             td.NOCTW_raw,
             td.temperature,
             tm.angle,
-            drv.reducer_angle(tm.angle),
-            motor_rpm,
-            drv.reducer_RPM(motor_rpm)
+            tm.reducer_angle,
+            drv.get_last_rpm(),
+            drv.reducer_RPM(drv.get_last_rpm())
             /*tb.accx,
             tb.accy,
             tb.accz,
@@ -417,14 +433,18 @@ void telemetryLoop(void* arg) {
                 else if (strncmp(cmd, "CTRL:OPENLOOP_BEMF", 19) == 0) control_mode = MODE_OPENLOOP_BEMF;
                 else if (strncmp(cmd, "CTRL:CLOSED_FOC", 15) == 0) control_mode = MODE_CLOSED_FOC;
                 else if (strncmp(cmd, "CTRL:CLOSED_SINUSOIDAL", 23) == 0) control_mode = MODE_CLOSED_SINUSOIDAL;
-                else if (strcmp(cmd, "IDLE") == 0) motion = MOTION_IDLE, drv.request_foc_stop();
-                else if (strcmp(cmd, "ALIGN") == 0) motion = MOTION_STARTUP;
+                else if (strcmp(cmd, "IDLE") == 0) motion = MOTION_IDLE, drv.request_foc_stop(), drv.reset_spin_timer();
+                else if (strcmp(cmd, "ALIGN") == 0) drv.reset_spin_timer(), drv.reset_pos_loop(), drv.reset_vel_loop(), drv.reset_foc(), motion = MOTION_STARTUP;
                 else if (strncmp(cmd, "RUN", 3) == 0){
                     int duration = atoi(strchr((char*)cmd, ':') + 1);
                     drv.set_spin_duration(duration);
                     drv.reset_spin_timer();
-                    motion = MOTION_STARTUP;
+                    drv.reset_pos_loop();
+                    drv.reset_vel_loop();
+                    drv.reset_foc();
+                    motion = MOTION_SPINNING;
                     printf("Spin duration set to %d seconds\n", duration);
+                    printf("Spinning with mode %d and control %d\n", control_mode, closed_mode);
                     fflush(stdout);
                 }
                 else if (strcmp(cmd, "BRAKE") == 0) motion = MOTION_RAMPING_DOWN, drv.request_foc_stop();
@@ -439,30 +459,47 @@ void telemetryLoop(void* arg) {
                     char prefix[10];
                     float Kp = 0.0f, Ki = 0.0f, Kd = 0.0f;
                     if (sscanf(cmd, "PID_%11[^_]_KP:%f_KI:%f_KD:%f", prefix, &Kp, &Ki, &Kd) == 4) {
-                        float param = -1.0f; // Default to invalid
-                        if      (strcmp(prefix, "VEL") == 0) param = 0.0f;
-                        else if (strcmp(prefix, "POS") == 0) param = 1.0f;
-                        else if (strcmp(prefix, "TORQUE") == 0) param = 2.0f;
-                        else if (strcmp(prefix, "FLUX") == 0) param = 3.0f;
+                        int8_t param = -1; // Default to invalid
+                        if      (strcmp(prefix, "VEL") == 0) param = 0;
+                        else if (strcmp(prefix, "POS") == 0) param = 1;
+                        else if (strcmp(prefix, "TORQUE") == 0) param = 2;
+                        else if (strcmp(prefix, "FLUX") == 0) param = 3;
                         
-                        if (param >= 0.0f) {
+                        if (param >= 0) {
                             drv.set_PID_tuning(param, Kp, Ki, Kd);
                             printf("%s PID updated: Kp=%.4f Ki=%.4f Kd=%.4f\n", prefix, Kp, Ki, Kd);
                             fflush(stdout);
                         }
                     }
-                else if (strncmp(cmd, "SP_", 4) == 0) {
-                    char sp[10];
+                }
+                else if (strncmp(cmd, "SP_", 3) == 0) {
                     float target = 0.0f;
-                    if (sscanf(cmd, "SP_%11[^_]:%f", sp, &target) == 2) {
-                        if      (strcmp(sp, "POS") == 0) drv.set_target_params(target, drv.target_vel, drv.target_current);
-                        else if (strcmp(sp, "VEL") == 0) drv.set_target_params(drv.target_pos, target, drv.target_current);
-                        else if (strcmp(sp, "TOR") == 0) drv.set_target_params(drv.target_pos, drv.target_vel, target);
-                        printf("%s Target updated: %.4f\n", sp, target);
+                    if (sscanf(cmd, "SP_POS:%f", &target) == 1) {
+                        drv.set_target_pos(target);
+                        closed_mode = MODE_POS;
+                        printf("POS Target updated: %.4f\n", target);
                         fflush(stdout);
                     }
+                    else if (sscanf(cmd, "SP_VEL:%f", &target) == 1) {
+                        drv.set_target_vel(target);
+                        closed_mode = MODE_VEL;
+                        printf("VEL Target updated: %.4f\n", target);
+                        fflush(stdout);
+                    }
+                    else if (sscanf(cmd, "SP_TOR:%f", &target) == 1) {
+                        drv.set_target_torque(target);
+                        closed_mode = MODE_TORQUE;
+                        printf("TOR Target updated: %.4f\n", target);
+                        fflush(stdout);
+                    }
+                    else {
+                        printf("Error parsing SP command: %s\n", cmd);
+                        fflush(stdout);
+                    }
+                }
                 else if (strcmp(cmd, "FAULT_OVERRIDE_ON") == 0) drv.set_override(true);
                 else if (strcmp(cmd, "FAULT_OVERRIDE_OFF") == 0) drv.set_override(false);
+                
             }
         }
     }

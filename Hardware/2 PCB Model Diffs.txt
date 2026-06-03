@@ -16,3 +16,5 @@ Change Vsense resistors 52.3k and 10k							Obtain values excel
 
 
 Current consumption with 5010 360KV
+
+USB Transmission Standby 15.5V 0.067 Ah
