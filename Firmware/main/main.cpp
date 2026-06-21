@@ -3,6 +3,7 @@
 #include "MT6701.h"
 #include "bmi.h"
 #include "MCP2551.h"
+#include <cstring>
 
 // TIMER //
 volatile uint32_t isr_counter = 0;
@@ -31,7 +32,6 @@ SemaphoreHandle_t bmi_mutex = NULL;
 // MAIN FUNCTION DECLARATION //
 int initialize();
 int calibration();
-void start_control_timer();
 void create_tasks_once();
 void controlISR(void* arg);
 void controlLoop(void* arg);
@@ -95,7 +95,6 @@ extern "C" void app_main(void)
                     printf("\nRunning....\n");
                     vTaskDelay(pdMS_TO_TICKS(200));
                     create_tasks_once();
-                    start_control_timer();
                     system_state = SYSTEM_RUNNING;
 
                 } else {
@@ -157,35 +156,6 @@ int calibration() {
     return drv.calibration() + mag.calibration() /*+ bmi270.calibration()*/;
 }
 
-void start_control_timer()
-{
-    timer_config_t config = {};
-    config.divider = TIMER_DIVIDER;
-    config.counter_dir = TIMER_COUNT_UP;
-    config.counter_en = TIMER_PAUSE;
-    config.alarm_en = TIMER_ALARM_EN;
-    config.auto_reload = TIMER_AUTORELOAD_EN;
-    config.intr_type = TIMER_INTR_LEVEL;
-    config.clk_src = TIMER_SRC_CLK_APB;
-
-    timer_init(TIMER_GROUP_0, TIMER_0, &config);
-    timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
-
-    // 1 MHz timer → 1 tick = 1 µs
-    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, TIMER_INTERVAL_US);
-    timer_enable_intr(TIMER_GROUP_0, TIMER_0);
-
-    timer_isr_register(
-        TIMER_GROUP_0,
-        TIMER_0,
-        controlISR,
-        NULL,
-        ESP_INTR_FLAG_IRAM,
-        NULL
-    );
-    timer_start(TIMER_GROUP_0, TIMER_0);
-}
-
 void create_tasks_once() {
     static bool tasks_created = false;
     if (!tasks_created) {
@@ -199,15 +169,19 @@ void create_tasks_once() {
     }
 }
 
+
 void controlLoop(void* arg){
     esp_task_wdt_add(NULL);  // Subscribe to watchdog
 
     float local_angle = 0.0f;
     float local_reducer_angle = 0.0f;
     float local_rpm = 0.0f;
-
+    
     while(true){
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+        drv.read_currents_sync();  // Ensure currents are read sync with control loop
+        
         if (fbk_sys == MAG) {
             mag_data temp = mag.getdata();
             local_angle = temp.angle;
@@ -218,15 +192,15 @@ void controlLoop(void* arg){
                 fbk_pkg.angle = temp.angle;
                 fbk_pkg.status = temp.status;
                 fbk_pkg.reducer_angle = local_reducer_angle;
-            xSemaphoreGive(fbk_mutex);
-        }
-        
-        else if (fbk_sys == HALL) {
-            // future implementation of Hall sensor
-        }
-        
-        switch (motion) {
-            case MOTION_STARTUP:
+                xSemaphoreGive(fbk_mutex);
+            }
+            
+            else if (fbk_sys == HALL) {
+                // future implementation of Hall sensor
+            }
+            
+            switch (motion) {
+                case MOTION_STARTUP:
                 if (drv.align(local_angle).done) {
                     motion = MOTION_SPINNING;
                 }
@@ -250,28 +224,28 @@ void controlLoop(void* arg){
             {
                 switch (control_mode) {
                     case MODE_CLOSED_FOC:
-                        switch (closed_mode) {
+                    switch (closed_mode) {
                             case MODE_TORQUE:
-                                drv.foc_control(local_angle);
-                                break;
+                            drv.foc_control(local_angle);
+                            break;
                             case MODE_VEL:
-                                drv.velocity_loop(local_rpm);
-                                drv.foc_control(local_angle);
-                                break;
+                            drv.velocity_loop(local_rpm);
+                            drv.foc_control(local_angle);
+                            break;
                             case MODE_POS:
-                                drv.position_loop(local_reducer_angle);
-                                drv.velocity_loop(local_rpm);
-                                drv.foc_control(local_angle);
-                                break;
+                            drv.position_loop(local_reducer_angle);
+                            drv.velocity_loop(local_rpm);
+                            drv.foc_control(local_angle);
+                            break;
                             default: break;
                         }
                         break;
-
-                    case MODE_OPENLOOP_BEMF:
+                        
+                        case MODE_OPENLOOP_BEMF:
                         drv.openloop_bemf(20.0f, 50.0f);
                         break;
-
-                    case MODE_CLOSED_SINUSOIDAL:
+                        
+                        case MODE_CLOSED_SINUSOIDAL:
                         drv.sinusoidal_spin(local_angle, 20.0f);
                         break;
                     default: break;
@@ -283,11 +257,11 @@ void controlLoop(void* arg){
                     motion = MOTION_IDLE;
                 break;
 
-            case MOTION_IDLE:
+                case MOTION_IDLE:
                 drv.brake();
                 break;
 
-            default: break;
+                default: break;
         }
         esp_task_wdt_reset();
     }
@@ -300,7 +274,7 @@ void bmiLoop(void* arg) {
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
             BMI_data temp = bmi270.getdata();
             xSemaphoreTake(bmi_mutex, portMAX_DELAY);
-                bmi_pkg = temp;
+            bmi_pkg = temp;
             xSemaphoreGive(bmi_mutex);
             esp_task_wdt_reset();
         }
@@ -319,7 +293,7 @@ void canLoop(void* arg) {
                 DRV_data td;
                 angle_data tm;
                 BMI_data tb;
-
+                
                 if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
                     td = drv.getdata();
                     xSemaphoreGive(drv_mutex);
@@ -334,7 +308,7 @@ void canLoop(void* arg) {
                 slave_pkg.red_rpm = drv.reducer_RPM(drv.get_last_rpm());
                 slave_pkg.nfault = td.NFAULT_raw;
                 slave_pkg.oc = td.NOCTW_raw;
-
+                
                 CAN_bus.sendData(slave_pkg, master_id);
                 CAN_bus.receiveData(&master_pkg, master_id);
                 drv.set_target_pos(master_pkg.pos);
@@ -347,7 +321,7 @@ void canLoop(void* arg) {
                 master_pkg.pos = 0.0f;
                 master_pkg.vel = 0.0f; 
                 master_pkg.torque = 0.0f; 
-
+                
                 CAN_bus.sendData(master_pkg, motor_dest_id);
             }
             //esp_task_wdt_reset();
@@ -368,7 +342,7 @@ void telemetryLoop(void* arg) {
         DRV_data td;
         angle_data tm;
         BMI_data tb;
-
+        
         if (xSemaphoreTake(drv_mutex, portMAX_DELAY) == pdTRUE) {
             td = drv.getdata();
             xSemaphoreGive(drv_mutex);
@@ -379,7 +353,7 @@ void telemetryLoop(void* arg) {
             tb = bmi_pkg;
             xSemaphoreGive(bmi_mutex);
         }
-
+        
         int len = snprintf(
             buf, sizeof(buf),
             "%d,%.3f,%.3f,%.3f,%.3f,%2d,%3d,%3d,%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f\n",
@@ -410,21 +384,21 @@ void telemetryLoop(void* arg) {
         if (len > 0) {
             printf("%s", buf);
         }
-
+        
         uint8_t rxbuf[64] = {0};
         int rxlen = usb_serial_jtag_read_bytes(rxbuf, sizeof(rxbuf) - 1, 0);
-
+        
         if (rxlen > 0) {
             rxbuf[rxlen] = '\0';
             for (int i = rxlen - 1; i >= 0; i--) {
                 if (rxbuf[i] == '\r' || rxbuf[i] == '\n' || rxbuf[i] == ' ')
-                    rxbuf[i] = '\0';
+                rxbuf[i] = '\0';
                 else break;
             }
 
             printf("RAW CMD: [%s] len=%d\n", rxbuf, rxlen);  // add this
             fflush(stdout);
-
+            
             char* cmd = strchr((char*)rxbuf, ':');
             if (cmd != NULL) {
                 cmd++;
@@ -505,15 +479,41 @@ void telemetryLoop(void* arg) {
     }
 }
 
-void IRAM_ATTR controlISR(void* arg)
+extern "C" void IRAM_ATTR mcpwm_isr(void* arg)  // IRAM_ATTR to place ISR in IRAM for faster execution
 {
-    timer_group_clr_intr_status_in_isr(TIMER_GROUP_0, TIMER_0);
-    timer_group_enable_alarm_in_isr(TIMER_GROUP_0, TIMER_0);
+    MCPWM0.int_clr.timer0_tep_int_clr = 1; // Clear the MCPWM TEP interrupt flag
 
     static uint32_t tick = 0;
     tick++;
 
-    BaseType_t woken = pdFALSE;
+    BaseType_t woken = pdFALSE; // If a task was woken by this ISR (with higher priority), this will be set to true
+
+    // Wake the fast control loop exactly on the PWM center (ONLY if task exists)
+    if (tick % CONTROL_DIVIDER == 0 && focTaskHandle != NULL)
+        vTaskNotifyGiveFromISR(focTaskHandle, &woken);
+        
+    if (tick % TELEMETRY_DIVIDER == 0 && telemetryTaskHandle != NULL)
+        vTaskNotifyGiveFromISR(telemetryTaskHandle, &woken);
+
+    if (included_bmi && tick % BMI_DIVIDER == 0 && bmiTaskHandle != NULL)
+        vTaskNotifyGiveFromISR(bmiTaskHandle, &woken);
+
+    if (tick % CAN_DIVIDER == 0 && canTaskHandle != NULL)
+        vTaskNotifyGiveFromISR(canTaskHandle, &woken);
+
+    portYIELD_FROM_ISR(woken); // If a higher priority task was woken, yield to it immediately after the ISR
+}
+
+/*
+void IRAM_ATTR controlISR(void* arg)    // IRAM_ATTR to place ISR in IRAM for faster execution
+{
+    timer_group_clr_intr_status_in_isr(TIMER_GROUP_0, TIMER_0); // Hardware timer interrupt clear
+    timer_group_enable_alarm_in_isr(TIMER_GROUP_0, TIMER_0); // Rearm timer alarm
+
+    static uint32_t tick = 0;
+    tick++;
+
+    BaseType_t woken = pdFALSE; // If a task was woken by this ISR (with higher priority), this will be set to true
 
     if (tick % CONTROL_DIVIDER == 0)
         vTaskNotifyGiveFromISR(focTaskHandle, &woken);
@@ -524,9 +524,9 @@ void IRAM_ATTR controlISR(void* arg)
     if (tick % CAN_DIVIDER == 0)
         vTaskNotifyGiveFromISR(canTaskHandle, &woken);
 
-    portYIELD_FROM_ISR(woken);
+    portYIELD_FROM_ISR(woken); // If a higher priority task was woken, yield to it immediately after the ISR
 }
-
+*/
 
 /*main
 |
@@ -534,9 +534,9 @@ void IRAM_ATTR controlISR(void* arg)
 |----> calib : calibrate rest of components
 |
 |----> Open loop mov
-        --> fast loop BLDC readings: CORE 1
+--> fast loop BLDC readings: CORE 1
 |----> Closed loop mov
-        --> fast loop BLDC + MAG readings: CORE 1
+--> fast loop BLDC + MAG readings: CORE 1
 |
 |----> Sensors data store: CORE 0 (lower freq)
 

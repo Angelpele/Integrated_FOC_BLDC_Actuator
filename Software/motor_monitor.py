@@ -230,8 +230,12 @@ class MetricCard(QFrame):
 # ─────────────────────────────────────────────────────────────
 #  PID ROW WIDGET
 # ─────────────────────────────────────────────────────────────
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QGridLayout, QLabel, 
+                             QSlider, QPushButton, QComboBox)
+from PyQt6.QtCore import Qt
+
 class PIDRow(QWidget):
-    """One row: label + Kp, Ki, Kd sliders + numeric display + send button."""
+    """One row: label + Kp, Ki, Kd sliders + multiplier + numeric display + send button."""
 
     def __init__(self, loop_name, prefix, color, send_callback, parent=None):
         super().__init__(parent)
@@ -253,60 +257,96 @@ class PIDRow(QWidget):
         grid.setSpacing(6)
         grid.setContentsMargins(4, 0, 4, 0)
 
-        self.params = {}   # name -> {slider, val_lbl, spinbox}
+        self.params = {}   # name -> {slider, combo, val_lbl}
+        
+        # We don't need min/max here anymore, the slider is always 0-1000
+        # The actual value is determined by the selected multiplier.
         params_cfg = [
-            ("Kp", 0.0, 10.0,  0.001,  "#00d4aa"),
-            ("Ki", 0.0,  100.0,  0.01, "#4e9fff"),
-            ("Kd", 0.0,  20.0,  0.01, "#ffb347"),
+            ("Kp", "#00d4aa"),
+            ("Ki", "#4e9fff"),
+            ("Kd", "#ffb347"),
         ]
-        for row_i, (name, mn, mx, step, pcol) in enumerate(params_cfg):
+
+        # Multiplier options: (Display Text, Math Value)
+        multipliers = [
+            ("x1000", 1000.0),
+            ("x100",  100.0),
+            ("x10",    10.0),
+            ("x1",     1.0),
+            ("x0.1",   0.1),
+            ("x0.01",  0.01),
+            ("x0.001", 0.001),
+            ("x0.0001", 0.0001)
+        ]
+
+        for row_i, (name, pcol) in enumerate(params_cfg):
+            # 1. Label
             lbl = QLabel(f"<b>{name}</b>")
             lbl.setFixedWidth(28)
             lbl.setStyleSheet("color:#9aa0b0; font-size:12px;")
 
+            # 2. Slider (Always 0 to 1000)
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setMinimum(0)
             slider.setMaximum(1000)
             slider.setValue(0)
-            slider.setStyleSheet(SLIDER_STYLE.replace('{color}', pcol).replace('{{', '{').replace('}}', '}'))
+            # slider.setStyleSheet(SLIDER_STYLE.replace('{color}', pcol).replace('{{', '{').replace('}}', '}'))
 
-            val_lbl = QLabel("0.000")
-            val_lbl.setFixedWidth(52)
+            # 3. Multiplier Dropdown
+            combo = QComboBox()
+            for text, val in multipliers:
+                combo.addItem(text, val) # Stores the float internally in 'userData'
+            combo.setCurrentIndex(1) # Default to 'x1'
+            combo.setFixedWidth(70)
+            combo.setStyleSheet(f"color:{pcol}; background:#1a2030; border:1px solid {pcol}55;"
+                                 "border-radius:3px; padding: 2px; font-size:11px;")
+
+            # 4. Final Value Label
+            val_lbl = QLabel("0.0000")
+            val_lbl.setFixedWidth(65)
             val_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             val_lbl.setStyleSheet(f"color:{pcol}; font-family:'Consolas'; font-size:12px; font-weight:700;")
 
-            # Store config for conversion
-            slider._mn = mn
-            slider._mx = mx
-            slider._name = name
-            slider._val_lbl = val_lbl
+            # Scope closure trick to bind the correct widgets for each row
+            def make_connections(s, c, l):
+                def _update():
+                    # Calculate: slider_value * combo_data
+                    final_val = s.value() * c.currentData()
+                    l.setText(f"{final_val:.4f}")
+                
+                s.valueChanged.connect(_update)
+                c.currentIndexChanged.connect(_update)
+                _update() # Initialize display text
 
-            def _on_change(v, s=slider, vl=val_lbl, mn=mn, mx=mx):
-                fval = mn + (v / 1000.0) * (mx - mn)
-                vl.setText(f"{fval:.3f}")
+            make_connections(slider, combo, val_lbl)
 
-            slider.valueChanged.connect(_on_change)
-
+            # Add to Grid
             grid.addWidget(lbl,     row_i, 0)
             grid.addWidget(slider,  row_i, 1)
-            grid.addWidget(val_lbl, row_i, 2)
+            grid.addWidget(combo,   row_i, 2)
+            grid.addWidget(val_lbl, row_i, 3)
 
-            self.params[name] = {'slider': slider, 'val_lbl': val_lbl, 'mn': mn, 'mx': mx}
+            self.params[name] = {'slider': slider, 'combo': combo}
 
-        # Send button
+        # 5. Send button
         btn = QPushButton("Send")
         btn.setFixedWidth(64)
         btn.setStyleSheet(f"background:#1a2030; color:{color}; border:1px solid {color}55;"
                            "border-radius:5px; padding:4px 8px; font-weight:600;")
         btn.clicked.connect(self._send)
-        grid.addWidget(btn, 0, 3, 3, 1, Qt.AlignmentFlag.AlignVCenter)
+        
+        # Button spans all 3 rows, placed in column 4
+        grid.addWidget(btn, 0, 4, 3, 1, Qt.AlignmentFlag.AlignVCenter)
 
+        # Make the slider stretch to fill available horizontal space
         grid.setColumnStretch(1, 1)
         main.addLayout(grid)
 
     def _get_val(self, name):
         p = self.params[name]
-        return p['mn'] + (p['slider'].value() / 1000.0) * (p['mx'] - p['mn'])
+        raw_val = p['slider'].value()
+        multiplier = p['combo'].currentData()
+        return float(raw_val * multiplier)
 
     def _send(self):
         kp = self._get_val("Kp")
@@ -316,7 +356,6 @@ class PIDRow(QWidget):
 
     def get_values(self):
         return {n: self._get_val(n) for n in self.params}
-
 
 # ─────────────────────────────────────────────────────────────
 #  PLOT HELPER

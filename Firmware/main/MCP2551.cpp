@@ -4,6 +4,7 @@
 //===================================================================================================//
 
 #include "MCP2551.h"
+#include <cstring>
 template bool CAN::sendData<CANPacket>(const CANPacket& data, uint8_t ID);
 template bool CAN::sendData<MasterPacket>(const MasterPacket& data, uint8_t ID);
 

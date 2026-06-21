@@ -94,6 +94,11 @@ class DRV {
             return (float)PVDD_raw * 3.3 / 4095 * R_frac + V_offset;
         }
 
+        void read_currents_sync() {
+            SO1_raw = adc1_get_raw(SO1);
+            SO2_raw = adc1_get_raw(SO2);
+        }
+
         void set_MOC(bool state){
             gpio_set_level(MOC, state ? 1 : 0);
         }
@@ -149,7 +154,7 @@ class DRV {
         static constexpr float reducer_ratio = 15.0f; // Reducer ratio
 
         // DRV current sensing
-        float current_gain = 40.0; 
+        float current_gain = 10.0; 
 
         //Voltage sensing
         float voltage_gain = 11.0f; // 100k + 10k / 10k
@@ -168,8 +173,8 @@ class DRV {
         bool aligned = false;
         float offset = 0.0;
         float align_time = 0.0;
-        float ALIGN_DURATION = 0.5f;   // 1500 ms
-        float ALIGN_DUTY = 30.0f;
+        float ALIGN_DURATION = 0.2f;   // 200 ms
+        float ALIGN_DUTY = 40.0f;
 
         // Waveform generation
         uint32_t PWM_freq = 40000; // 40 kHz carrier frequency for MCPWM
@@ -204,29 +209,29 @@ class DRV {
         float last_rpm = 0.0f;
         
         float CLOSED_LOOP_LPF = 1.0f;  // 1.0 = no filtering for mag
-        float RPM_LPF      = 0.80f;    // 0.3 for fast speeds, 0.8 for slow speeds
-        static constexpr float RPM_UNWRAP_THR     = 180.0f;
-        static constexpr int64_t RPM_MIN_DT_US    = 100;    // guard against /0 on first call
+        // float RPM_LPF      = 0.80f;    // 0.3 for fast speeds, 0.8 for slow speeds
+        static constexpr float RPM_UNWRAP_THR = 180.0f;
+        static constexpr int64_t RPM_MIN_DT_US = 50;    // guard against /0 on first call
 
+        // CONSTANTS WITH REDUCER
         // Velocity tunning
-        float Vel_Kp = 0.002f;
-        float Vel_Ki = 0.008f;
+        float Vel_Kp = 0.1f;    
+        float Vel_Ki = 0.01f;  
         float Vel_Kd = 0.0f;
-        float Vel_LPF = 0.05f;
+        float Vel_LPF = 0.1f;   
         float target_vel = 0.0f;
-
         // Position tunning
-        float Pos_Kp = 1.0f;
-        float Pos_Ki = 0.0f;
-        float Pos_Kd = 0.0f;
-        float Pos_LPF = 0.5f;
+        float Pos_Kp = 20.0f;  
+        float Pos_Ki = 0.0f;    
+        float Pos_Kd = 0.0f; 
+        float Pos_LPF = 0.1f;  
         float target_pos = 0.0f;
-
         // Current tunning
-        float Id_LPF = 0.2f;
-        float Iq_LPF = 0.2f;
-        float Iq_Kp  = 0.05f;   float Iq_Ki = 200.0f;   float Iq_Kd = 0.0f;
-        float Id_Kp  = 0.05f;   float Id_Ki = 200.0f;   float Id_Kd = 0.0f;
+        float Id_LPF = 0.05f;
+        float Iq_LPF = 0.05f;   
+        float Iq_Kp  = 0.1f;   float Iq_Ki = 10.0f;   float Iq_Kd = 0.0f;
+        float Id_Kp  = 0.1f;   float Id_Ki = 10.0f;   float Id_Kd = 0.0f;
+
         float i_d_filt = 0.0f;
         float i_q_filt = 0.0f;
         float target_current = 0.0f;
@@ -238,6 +243,11 @@ class DRV {
         bool foc_initialized = false;
         bool just_aligned = true;
         bool foc_stop = false;
+
+        // Reducer limits
+        float reducer_max_angle = 90.0f;      // Maximum allowed angle (degrees)
+        float reducer_min_angle = -90.0f;     // Minimum allowed angle (degrees)
+        bool reducer_limits_enabled = true;  // Disabled by default for safety during tuning
 
         // Position loop state
         float pos_error_integral = 0.0f;
@@ -254,9 +264,10 @@ class DRV {
         bool vel_initialized = false;
 
         // Velocity loop output clamp (Amps)
-        static constexpr float VEL_OUT_MAX = 10.0f;
+        static constexpr float VEL_OUT_MAX = 8.0f;
         // Position loop output clamp (RPM)
-        static constexpr float POS_OUT_MAX = 1000.0f;
+        static constexpr float POS_OUT_MAX = 500.0f;
+        static constexpr float POS_IN_MAX = 360.0f;
 
     };
 
@@ -279,3 +290,32 @@ class NTC_sensor {
 };
 
 #endif
+
+
+
+
+/*  VARIABLES NO REDUCER
+
+        // Velocity tunning
+        float Vel_Kp = 0.002f;
+        float Vel_Ki = 0.008f;
+        float Vel_Kd = 0.0f;
+        float Vel_LPF = 0.8f;
+        float target_vel = 0.0f;
+
+        // Position tunning
+        float Pos_Kp = 20.0f;
+        float Pos_Ki = 0.0f;
+        float Pos_Kd = 0.0f;
+        float Pos_LPF = 0.8f;
+        float target_pos = 0.0f;
+
+        // Current tunning
+        float Id_LPF = 0.8f;
+        float Iq_LPF = 0.8f;
+        float Iq_Kp  = 0.005f;   float Iq_Ki = 3.0f;   float Iq_Kd = 0.0f;
+        float Id_Kp  = 0.005f;   float Id_Ki = 3.0f;   float Id_Kd = 0.0f;
+        float i_d_filt = 0.0f;
+        float i_q_filt = 0.0f;
+
+*/

@@ -5,6 +5,11 @@
 #include "driver/gpio.h"  //ESP32 GPIO
 #include "driver/adc.h"
 #include "driver/mcpwm.h"
+#include "soc/mcpwm_reg.h"
+#include "soc/mcpwm_struct.h"
+#include "soc/soc.h"
+#include "esp_intr_alloc.h"
+#include "soc/interrupts.h"
 #include "driver/timer.h"
 #include "driver/ledc.h"
 #include "driver/uart.h"

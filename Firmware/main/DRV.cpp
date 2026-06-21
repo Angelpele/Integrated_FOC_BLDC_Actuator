@@ -3,6 +3,7 @@
 //===================================================================================================//
 #include "DRV.h"
 
+
 NTC_sensor ntc;
 
 int DRV::init()
@@ -44,7 +45,7 @@ int DRV::init()
     gpio_set_direction(EN_DRV, GPIO_MODE_OUTPUT); // Set to output to drive the pin
     gpio_set_level(EN_DRV, 0);        // keep driver disabled first
     gpio_set_level(DC_CAL, 0);        // normal operation
-    gpio_set_level(GAIN, 1);          // choose gain explicitly
+    gpio_set_level(GAIN, 0);          // choose gain explicitly
     gpio_set_level(MPWM, 0);          // 6 PWM indep inputs
     gpio_set_level(MOC, 0);           // 0: cycle by cycle current control
     for (int i = 0; i < 50; i++) {      // 50 × 100ms = 5000ms
@@ -178,6 +179,7 @@ int DRV::fault_detection() {
 }
 
 #define GPIO_PWM_UNIT MCPWM_UNIT_0
+extern "C" void mcpwm_isr(void* arg);  // Declare the ISR for mcpwm in main.cpp
 
 void DRV::setup_mcpwm() {
     // Initialize pins for 3 phases (6 total signals)
@@ -205,6 +207,9 @@ void DRV::setup_mcpwm() {
     mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_0, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 40, 40);
     mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_1, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 40, 40);
     mcpwm_deadtime_enable(GPIO_PWM_UNIT, MCPWM_TIMER_2, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 40, 40);
+
+    esp_intr_alloc(ETS_PWM0_INTR_SOURCE, ESP_INTR_FLAG_IRAM, mcpwm_isr, NULL, NULL);
+    MCPWM0.int_ena.timer0_tep_int_ena = 1; // Enable interrupt on Timer 0 TEP (Timer Event Peak)
 }
 
 bool DRV::svpwm(float v_a, float v_b, float v_c) {
@@ -248,7 +253,7 @@ bool DRV::svpwm(float v_a, float v_b, float v_c) {
 
 AlignOffset DRV::align(float angle) {
     AlignOffset result = {false, 0.0f};
-    float align_voltage = (align_time < ramp_duration) ? (align_time / ramp_duration) * 3.0f : 3.0f;
+    float align_voltage = (align_time < ramp_duration) ? (align_time / ramp_duration) * 6.0f : 6.0f;
     
     svpwm(align_voltage, -align_voltage / 2.0f, -align_voltage / 2.0f);
     
@@ -408,12 +413,8 @@ bool DRV::foc_control(float fbk_angle)
     float dt = now - foc_prev_time;
     if (dt <= 0.0f || dt > 0.1f) dt = 0.000050f;  // clamp to 50µs
 
-    // Current sensing
-    int raw1 = adc1_get_raw(SO1);
-    if (raw1 >= 0) SO1_raw = raw1;
-    int raw2 = adc1_get_raw(SO2);
-    if (raw2 >= 0) SO2_raw = raw2;
-    
+    // Current sensing is done sync with MCPWM
+
     float i_a = (float)(SO1_raw - SO1_offset) * voltage_step / (current_gain * R_shunt);
     float i_b = (float)(SO2_raw - SO2_offset) * voltage_step / (current_gain * R_shunt);
 
@@ -544,9 +545,13 @@ float DRV::position_loop(float fbk_angle_deg) {
         return target_vel;
     } 
 
+    
     float raw_error = target_pos - fbk_angle_deg;
-    if (raw_error > 180.0f) raw_error -= 360.0f;
-    if (raw_error < -180.0f) raw_error += 360.0f;
+
+    // Cast angle if NO reducer
+    
+    //if (raw_error > 180.0f) raw_error -= 360.0f;
+    //if (raw_error < -180.0f) raw_error += 360.0f;
     
     pos_error_filt += Pos_LPF * (raw_error - pos_error_filt);
 
@@ -557,6 +562,20 @@ float DRV::position_loop(float fbk_angle_deg) {
     pos_error_integral = fmaxf(-int_limit, fminf(int_limit, pos_error_integral));
 
     float output = Pos_Kp * pos_error_filt + Pos_Ki * pos_error_integral + Pos_Kd * (pos_error_filt - pos_error_prev) / dt_pos;
+
+    //VIRTUAL LIMIT SWITCH FOR REDUCER
+    if (reducer_limits_enabled) {
+        if (fbk_angle_deg >= reducer_max_angle && output > 0.0f) {
+            output = 0.0f;              // Kill the forward command
+            pos_error_integral = 0.0f;  // Prevent integral windup against the invisible wall
+        }
+        else if (fbk_angle_deg <= reducer_min_angle && output < 0.0f) {
+            output = 0.0f;              // Kill the backward command
+            pos_error_integral = 0.0f;  // Prevent integral windup
+        }
+    }
+    
+    output = fmaxf(-POS_OUT_MAX, fminf(POS_OUT_MAX, output));   // Clamp to max velocity
     pos_error_prev = pos_error_filt;
     pos_prev_time = now_pos;
     target_vel = output; // Feed position controller output to velocity loop as target
@@ -759,12 +778,12 @@ float DRV::real_RPM(float angle_deg) {
     float raw_rpm = (delta / 360.0f) / dt_min;
 
     // Exponential moving average (low pass filter to smooth noise)
-    rpm_filtered = RPM_LPF * raw_rpm + (1.0f - RPM_LPF) * rpm_filtered;
+    //rpm_filtered = RPM_LPF * raw_rpm + (1.0f - RPM_LPF) * rpm_filtered;
 
     rpm_last_angle = angle_deg;
     rpm_last_time  = now_us;
 
-    return rpm_filtered;
+    return raw_rpm;
 }
 
 float DRV::reducer_angle(float motor_angle) {
@@ -783,9 +802,9 @@ float DRV::reducer_angle(float motor_angle) {
     // Scale down by gear ratio
     reducer += delta / reducer_ratio;
 
-    // Normalize reducer angle to [0, 360)
-    reducer = fmodf(reducer, 360.0f);
-    if (reducer < 0.0f) reducer += 360.0f;
+    // Normalize reducer angle to [0, 360) if only motor with no reducer
+    //reducer = fmodf(reducer, 360.0f);
+    // if (reducer < 0.0f) reducer += 360.0f;
 
     last_angle = motor_angle;
     return reducer;

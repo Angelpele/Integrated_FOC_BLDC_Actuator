@@ -1,4 +1,4 @@
-B - Refresh solid areas
+ B - Refresh solid areas
 X - route track
 W - make track thicker
 SHIFT + W - make track thinner

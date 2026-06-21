@@ -14,4 +14,17 @@ change the LPF to 0.05 for iq and id
 
 the real value for iq and id only appears after pressing the motor.
 
-- pi/2 to the align offset.
+
+
+
+
+
+
+For vel loop, small gains, 0.001
+for pos loop, it was filtering the diff between 2 angles so when changing from 359 to 1 and back, the filter 359 + 0.8 * (1 - 359) returned 72º. Change to filtered error instead
+
+
+The adc1 values for currents were read while pwm on and offs changes, use an ISR to call the reading sync with the foc loop. 
+
+Gain changed to 10 instead of 40. Previously it was saturating the adc.
+The lack of saturation needs to be compensated with a lighter LPF, it needs to react faster, less damping.
