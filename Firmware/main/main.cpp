@@ -2,8 +2,8 @@
 #include "DRV.h"
 #include "MT6701.h"
 #include "bmi.h"
+#include "hall.h"
 #include "MCP2551.h"
-#include <cstring>
 
 // TIMER //
 volatile uint32_t isr_counter = 0;
@@ -19,6 +19,7 @@ DRV drv;
 MT6701 mag;
 BMI270 bmi270;
 CAN CAN_bus;
+HALL_SENSOR hall_sensor;
 angle_data fbk_pkg;
 BMI_data bmi_pkg;
 TelemetryPacket pkg;
@@ -43,7 +44,7 @@ void canLoop(void* arg);
 
 SystemState system_state = SYSTEM_INIT;
 DRV_MotionState motion = MOTION_IDLE;
-FeedbackSys fbk_sys = MAG;
+FeedbackSys fbk_sys = HALL;
 ControlMode control_mode = MODE_CLOSED_FOC;
 ClosedMode closed_mode = MODE_VEL;
 
@@ -135,6 +136,7 @@ int initialize() {
     }
     vTaskDelay(pdMS_TO_TICKS(50));
 
+    hall_sensor.init(15); // 15 pole pairs for hover wheel, 7 pole pairs for 5010 motor
     mag.init();
     if (included_bmi) {
         if (bmi270.init() != BMI_OK) {
@@ -189,22 +191,30 @@ void controlLoop(void* arg){
             local_reducer_angle = drv.reducer_angle(local_angle);
 
             xSemaphoreTake(fbk_mutex, portMAX_DELAY);
-                fbk_pkg.angle = temp.angle;
-                fbk_pkg.status = temp.status;
-                fbk_pkg.reducer_angle = local_reducer_angle;
-                xSemaphoreGive(fbk_mutex);
-            }
+            fbk_pkg.angle = temp.angle;
+            fbk_pkg.status = temp.status;
+            fbk_pkg.reducer_angle = local_reducer_angle;
+            xSemaphoreGive(fbk_mutex);
+        }
             
-            else if (fbk_sys == HALL) {
-                // future implementation of Hall sensor
-            }
+        else if (fbk_sys == HALL) {
+            local_angle = hall_sensor.getHallAngle();
+            local_rpm = drv.update_rpm(local_angle); // single call
+            local_reducer_angle = local_angle;
+
+            xSemaphoreTake(fbk_mutex, portMAX_DELAY);
+            fbk_pkg.angle = local_angle;
+            fbk_pkg.status = 0;  // Assuming no specific status for HALL sensor
+            fbk_pkg.reducer_angle = local_reducer_angle;
+            xSemaphoreGive(fbk_mutex);
+        }
             
-            switch (motion) {
-                case MOTION_STARTUP:
-                if (drv.align(local_angle).done) {
-                    motion = MOTION_SPINNING;
-                }
-                break;
+        switch (motion) {
+            case MOTION_STARTUP:
+            if (drv.align(local_angle).done) {
+                motion = MOTION_SPINNING;
+            }
+            break;
 
             case MOTION_RAMPING:
             {
@@ -253,15 +263,17 @@ void controlLoop(void* arg){
                 break;
             }
             case MOTION_RAMPING_DOWN:
+            {
                 if (drv.ramp(local_angle, 10.0f, 0.5f))   //Target freq and final freq
                     motion = MOTION_IDLE;
                 break;
-
-                case MOTION_IDLE:
+            }
+            case MOTION_IDLE:
+            {
                 drv.brake();
                 break;
-
-                default: break;
+            }
+            default: break;
         }
         esp_task_wdt_reset();
     }
@@ -528,57 +540,5 @@ void IRAM_ATTR controlISR(void* arg)    // IRAM_ATTR to place ISR in IRAM for fa
 }
 */
 
-/*main
-|
-|----> init :  initalize all sensors + components + timers
-|----> calib : calibrate rest of components
-|
-|----> Open loop mov
---> fast loop BLDC readings: CORE 1
-|----> Closed loop mov
---> fast loop BLDC + MAG readings: CORE 1
-|
-|----> Sensors data store: CORE 0 (lower freq)
-
-|-> Outer Control Loop:
-    ---> Call mov funcs with input pos, vel, acc
-
-
-|----> BL Comms func
-|----> CAN Comms func: packages to CAN protocol
-|----> Server web info print
-
-
-ERROR Flags can stop the program exec
-
-
-BMI.c funcs:
-
-init (define pins + protocols)
-calibration
-pull data
-
-MAG.c funcs:
-
-init (define pins + protocols)
-calibration
-pull data
-
-DRV.c funcs:
-
-init (define pins + protocols)
-calibration
-pull data
-
-ERROR flags
-
-ESP32 funcs
-
-NTC, voltages... data
-
-
-
-
-*/
 
 

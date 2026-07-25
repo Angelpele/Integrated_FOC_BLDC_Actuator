@@ -1,0 +1,3 @@
+C:/Users/angel/Desktop/Proyectos/FOC_BLDC/Software/build/_deps/implot-subbuild/CMakeFiles/implot-populate.dir
+C:/Users/angel/Desktop/Proyectos/FOC_BLDC/Software/build/_deps/implot-subbuild/CMakeFiles/edit_cache.dir
+C:/Users/angel/Desktop/Proyectos/FOC_BLDC/Software/build/_deps/implot-subbuild/CMakeFiles/rebuild_cache.dir

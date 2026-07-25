@@ -148,10 +148,9 @@ class DRV {
         uint16_t SO2_offset = 2048;
 
         // Motor parameters (5010 750KV)
-        static constexpr int MOTOR_POLE_PAIRS = 7;   // 14 poles
+        static constexpr int MOTOR_POLE_PAIRS = 15;   // 14 poles (7 pole pairs) for 5010 motor, 30 poles (15 pole pairs) for hover wheel
         static constexpr float MOTOR_RESISTANCE = 0.270f; // Ohms
-        static constexpr int MOTOR_MAX_CURRENT = 40; // Amps
-        static constexpr float reducer_ratio = 15.0f; // Reducer ratio
+        static constexpr float reducer_ratio = 1.0f; // Reducer ratio, change to 15 for reducer
 
         // DRV current sensing
         float current_gain = 10.0; 
@@ -170,11 +169,8 @@ class DRV {
         uint8_t nfault_glitch_count = 0; 
 
         // Alignment and offset
-        bool aligned = false;
-        float offset = 0.0;
         float align_time = 0.0;
         float ALIGN_DURATION = 0.2f;   // 200 ms
-        float ALIGN_DUTY = 40.0f;
 
         // Waveform generation
         uint32_t PWM_freq = 40000; // 40 kHz carrier frequency for MCPWM
@@ -209,7 +205,6 @@ class DRV {
         float last_rpm = 0.0f;
         
         float CLOSED_LOOP_LPF = 1.0f;  // 1.0 = no filtering for mag
-        // float RPM_LPF      = 0.80f;    // 0.3 for fast speeds, 0.8 for slow speeds
         static constexpr float RPM_UNWRAP_THR = 180.0f;
         static constexpr int64_t RPM_MIN_DT_US = 50;    // guard against /0 on first call
 
@@ -267,8 +262,6 @@ class DRV {
         static constexpr float VEL_OUT_MAX = 8.0f;
         // Position loop output clamp (RPM)
         static constexpr float POS_OUT_MAX = 500.0f;
-        static constexpr float POS_IN_MAX = 360.0f;
-
     };
 
 class NTC_sensor {
