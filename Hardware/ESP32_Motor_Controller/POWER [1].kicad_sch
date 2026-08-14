@@ -9430,7 +9430,25 @@
 			"ADcAbQBEAG8AZABCAHgAWgBLAG0AcABxAFkAVwBGAGgAZQBMAGsANwByAHYAdgA5AHYAUAB6AGsA"
 			"NQBVAEgAQQBBAEEAQQBBAEcAQQBEAGYAZgByADAAdQBmAHYAdQB1ADgAVgBKAFgAbAA1AGUAWgBt"
 			"AGEAbQByAEQAeQB3AEIAZwBvAGQAUgA2AFoANABQAE0AZgBiADIAMwB2AGgAdwBvAFcAUwBzAGcA"
-			"QQBBAEEAQQBBAEEAYgBPAGYAKw=="
+			"QQBBAEEAQQBBAEEAYgBPAGYAKwBaAEgAVgAzAGQAMwAvAG8AbwBZAGMAawA1AGcARQBBAEEAQQBB"
+			"AEEAYQBNAEcAdgBmAHYAVwByAG4AagAxADcAbQBnAC8AYgAyAHQAbwArACsATwBDAEQAagBvADQA"
+			"TwBpAFoARgBnAEkAUQBvAGQAeAAxAEYAZABYAGIAMQBxADEAUwBwAHgATQBtAFgASwBsAFAARAB3"
+			"AGMARgBsADUAQQBBAEEAQQBBAEEAQQBhAE0AVwB6AFkAcwBLAFMAawBKAEgARwB5AGQAZQB2AFcA"
+			"cwByAEkAeQBXAFgAbABnAE8AUQBvAGQAeAA3AEYAdQAzAGIAcQBLAGkAZwBwAHgAOAB1AGkAagBq"
+			"ADgAbwBLAEEAdwBBAEEAQQBBAEQAUQBsAEUAYwBmAGYAZABUAFoAKwBkADgAbABRAEYAMQBkADMA"
+			"ZgBmAGYAZgB5ADgAeABEAHkAeABFAG8AZQBNAGcAVABDAGIAVABwADUAOQArAEsAawA2AEcARABS"
+			"AHMAMgBjACsAWgBNAFcAWABrAEEAQQBBAEEAQQBBAEoAbwB5AGUAZgBMAGsAcwBXAFAASABpAHAA"
+			"TgB2AHYAdgBtAG0AbwBhAEYAQgBWAGgANQBZAGkARQBMAEgAUQBlAFQAbQA1AHUAYgBrADUASQBp"
+			"AFQAQgBRAHMAVwA5AE8ANwBkAFcAMQBZAGUAQQBBAEEAQQBBAEkAQwBtAGQATwB2AFcAYgBlAEgA"
+			"QwBoAGUASwBrAHUATABoADQAKwAvAGIAdABrAHUATABBAFUAaABRADYARAB1AEwAVABUAHoAOAAx"
+			"AG0AVQB6AG0AdwAyADcAZAB1AHQAMQAvAC8ALwAwAFMAOAB3AEEAQQBBAEEAQQBBAHQARwBiAHUA"
+			"MwBMAGwAKwBmAG4ANwBtAHcANAA2AE8AagBvADgALwAvAHAAaQBsAGsAZQAwAFUAaABZADQAagBP"
+			"AEgAMwA2ADkASgBvADEAYQA4AFQASgA5AE8AbgBUAFEAMABKAEMAWgBPAFUAQgBBAEEAQQBBAEEA"
+			"RwBqAFEANABNAEcARABiADcALwA5AGQAbgBHAFMAbgBwADUAZQBXAEYAZwBvAEsAdwA4AHMAUQBh"
+			"AEgAagBDAEQAWgBzADIASABEADIANwBGAGwAeAB3AG4ATABJAEEAQQBBAEEAQQBJAEEAcgAvAGYA"
+			"YQAzAHYAMwBWADEAZABUAFUAZgBOAGoAUQAwAEwARgB1ADIAVABHAEkAZQBkAEIAbQBGAGoAaQBQ"
+			"ADQAOABzAHMAdgB4AGMATwBBAGcASQBBAFoATQAyAFoASQB5AGcASQBBAEEAQQBBAEEAMABLADQA"
+			"SgBFAHkAYQBNAEcAVABOAEcAbg=="
 		)
 	)
 	(label "+16 POWER REV"
@@ -9662,7 +9680,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 255.016 118.872 0)
 			(effects
 				(font
@@ -10209,7 +10227,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 192.786 118.872 0)
 			(effects
 				(font
@@ -10811,7 +10829,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 183.896 118.872 0)
 			(effects
 				(font
@@ -11959,7 +11977,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 175.006 118.872 0)
 			(effects
 				(font
@@ -12094,7 +12112,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 245.618 118.872 0)
 			(effects
 				(font
@@ -12362,7 +12380,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 228.346 118.872 0)
 			(effects
 				(font
@@ -12431,7 +12449,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 210.566 118.872 0)
 			(effects
 				(font
@@ -12704,7 +12722,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 219.456 118.872 0)
 			(effects
 				(font
@@ -13173,7 +13191,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 237.236 118.872 0)
 			(effects
 				(font
@@ -13378,7 +13396,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "10uF"
+		(property "Value" "4.7uF"
 			(at 201.676 118.872 0)
 			(effects
 				(font

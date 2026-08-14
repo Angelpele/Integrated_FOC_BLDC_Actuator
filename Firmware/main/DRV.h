@@ -1,12 +1,117 @@
-//================================================================================================================//
-//                                                 DRV 8302 & Peripherals                                         //
-//================================================================================================================//
+//================================================================================================//
+//                                    DRV 8302 & Peripherals                                      //
+//================================================================================================//
 #ifndef DRV_H
 #define DRV_H 
 
-
 #include "esp32_S3.h"
 
+//================================================================================================//
+//                                    MOTOR PROFILE SELECTION                                     //
+//================================================================================================//
+// Choose ONE profile below:
+//   1 -> MOTOR_HOVERBOARD
+//   2 -> MOTOR_5010_DIRECT
+//   3 -> MOTOR_5010_REDUCER
+
+#define MOTOR_PROFILE 1
+
+#define PROFILE_HOVERBOARD   1
+#define PROFILE_5010_DIRECT  2
+#define PROFILE_5010_REDUCER 3
+
+//================================================================================================//
+#if (MOTOR_PROFILE == PROFILE_HOVERBOARD)
+
+    #define CFG_MOTOR_POLE_PAIRS   15
+    #define CFG_MOTOR_RESISTANCE   0.4f
+    #define CFG_REDUCER_RATIO      1.0f
+
+    // Current Loop Tuning
+    #define CFG_IQ_KP 0.15f
+    #define CFG_IQ_KI 20.0f
+    #define CFG_IQ_KD 0.0f
+    #define CFG_ID_KP 0.15f
+    #define CFG_ID_KI 20.0f
+    #define CFG_ID_KD 0.0f
+    #define CFG_ID_LPF 0.02f
+    #define CFG_IQ_LPF 0.02f
+
+    // Velocity Loop Tuning
+    #define CFG_VEL_KP  0.1f
+    #define CFG_VEL_KI  0.01f
+    #define CFG_VEL_KD  0.0f
+    #define CFG_VEL_LPF 1.0f
+
+    // Position Loop Tuning
+    #define CFG_POS_KP  20.0f
+    #define CFG_POS_KI  0.0f
+    #define CFG_POS_KD  0.0f
+    #define CFG_POS_LPF 0.1f
+
+#elif (MOTOR_PROFILE == PROFILE_5010_DIRECT)
+
+    #define CFG_MOTOR_POLE_PAIRS   7
+    #define CFG_MOTOR_RESISTANCE   0.270f
+    #define CFG_REDUCER_RATIO      1.0f
+
+    // Current Loop Tuning
+    #define CFG_IQ_KP 0.005f
+    #define CFG_IQ_KI 3.0f
+    #define CFG_IQ_KD 0.0f
+    #define CFG_ID_KP 0.005f
+    #define CFG_ID_KI 3.0f
+    #define CFG_ID_KD 0.0f
+    #define CFG_ID_LPF 0.8f
+    #define CFG_IQ_LPF 0.8f
+
+    // Velocity Loop Tuning
+    #define CFG_VEL_KP  0.002f
+    #define CFG_VEL_KI  0.008f
+    #define CFG_VEL_KD  0.0f
+    #define CFG_VEL_LPF 0.8f
+
+    // Position Loop Tuning
+    #define CFG_POS_KP  20.0f
+    #define CFG_POS_KI  0.0f
+    #define CFG_POS_KD  0.0f
+    #define CFG_POS_LPF 0.8f
+
+#elif (MOTOR_PROFILE == PROFILE_5010_REDUCER)
+
+    #define CFG_MOTOR_POLE_PAIRS   7
+    #define CFG_MOTOR_RESISTANCE   0.270f
+    #define CFG_REDUCER_RATIO      15.0f
+
+    // Current Loop Tuning
+    #define CFG_IQ_KP 0.1f
+    #define CFG_IQ_KI 10.0f
+    #define CFG_IQ_KD 0.0f
+    #define CFG_ID_KP 0.1f
+    #define CFG_ID_KI 10.0f
+    #define CFG_ID_KD 0.0f
+    #define CFG_ID_LPF 0.05f
+    #define CFG_IQ_LPF 0.05f
+
+    // Velocity Loop Tuning
+    #define CFG_VEL_KP  0.1f
+    #define CFG_VEL_KI  0.01f
+    #define CFG_VEL_KD  0.0f
+    #define CFG_VEL_LPF 0.1f
+
+    // Position Loop Tuning
+    #define CFG_POS_KP  20.0f
+    #define CFG_POS_KI  0.0f
+    #define CFG_POS_KD  0.0f
+    #define CFG_POS_LPF 0.1f
+
+#else
+    #error "Invalid MOTOR_PROFILE selected! Please select a valid profile at the top of drv.h"
+#endif
+
+//================================================================================================//
+//                                    STRUCTURES & ENUMS                                         //
+//================================================================================================//
 
 enum DRV_Error {
     DRV_OK = 0,
@@ -31,8 +136,12 @@ typedef struct {
     uint8_t NFAULT_raw;
     uint8_t NOCTW_raw;
     float temperature;
-}DRV_data;
+} DRV_data;
 
+
+//================================================================================================//
+//                                        DRV CLASS                                               //
+//================================================================================================//
 
 class DRV {
     public:
@@ -133,29 +242,29 @@ class DRV {
 
     private: 
         // DRV data
-        uint16_t SO1_raw = 0;   //Output current 1
-        uint16_t SO2_raw = 0;   //Output current 2
+        uint16_t SO1_raw = 0;   // Output current 1
+        uint16_t SO2_raw = 0;   // Output current 2
         uint16_t NFAULT_raw = 0;
         uint16_t NOCTW_raw = 0;
         int PVDD_raw = 0;
-        float V_offset = 1.1f; // Voltage offset
+        float V_offset = 1.1f;  // Voltage offset
 
         // DRV parameters
         float R_shunt = 0.01;
-        float voltage_step = 3.3/4095;
+        float voltage_step = 3.3 / 4095;
         float overvoltage = 16;
         uint16_t SO1_offset = 2048; // Default to mid-range (1.65V)
         uint16_t SO2_offset = 2048;
 
-        // Motor parameters (5010 750KV)
-        static constexpr int MOTOR_POLE_PAIRS = 15;   // 14 poles (7 pole pairs) for 5010 motor, 30 poles (15 pole pairs) for hover wheel
-        static constexpr float MOTOR_RESISTANCE = 0.270f; // Ohms
-        static constexpr float reducer_ratio = 1.0f; // Reducer ratio, change to 15 for reducer
-
+        // Motor parameters
+        static constexpr int MOTOR_POLE_PAIRS   = CFG_MOTOR_POLE_PAIRS;
+        static constexpr float MOTOR_RESISTANCE = CFG_MOTOR_RESISTANCE;
+        static constexpr float reducer_ratio    = CFG_REDUCER_RATIO;
+        
         // DRV current sensing
         float current_gain = 10.0; 
 
-        //Voltage sensing
+        // Voltage sensing
         float voltage_gain = 11.0f; // 100k + 10k / 10k
 
         // External sensors data
@@ -173,19 +282,19 @@ class DRV {
         float ALIGN_DURATION = 0.2f;   // 200 ms
 
         // Waveform generation
-        uint32_t PWM_freq = 40000; // 40 kHz carrier frequency for MCPWM
+        uint32_t PWM_freq = 40000;     // 40 kHz carrier frequency for MCPWM
         float phase_accumulator = 0;
-        float modulation_index = 1.0f; // Amplitude (0.0 to 1.0) if higher -> overmodulation, 0.8 best for high speeds
-        float electrical_freq = 2; // Motor Frequency (Hz), speed of the rotating field, higher than 0.5 to avoid deadzone
+        float modulation_index = 1.0f; // Amplitude (0.0 to 1.0)
+        float electrical_freq = 2;     // Motor Frequency (Hz)
         float elec_offset = 0.0f; 
         float theta_reset = true;
 
         // Ramping control
-        float ramp_rate = 50.0f; // How fast to change frequency (Hz/s)
+        float ramp_rate = 50.0f;       // How fast to change frequency (Hz/s)
         float ramp_active = false;
         float ramp_target_freq = 0.0f;
         float ramp_duration = .5f;
-        float dt = 0.000050f; // Elapsed time (assuming 50us)
+        float dt = 0.000050f;          // Elapsed time (assuming 50us)
 
         // Spinning control
         float spin_elapsed = 0.0f;
@@ -204,28 +313,27 @@ class DRV {
         float   rpm_filtered    = 0.0f;
         float last_rpm = 0.0f;
         
-        float CLOSED_LOOP_LPF = 1.0f;  // 1.0 = no filtering for mag
+        float CLOSED_LOOP_LPF = 1.0f;  // 1.0 = no filtering
         static constexpr float RPM_UNWRAP_THR = 180.0f;
-        static constexpr int64_t RPM_MIN_DT_US = 50;    // guard against /0 on first call
+        static constexpr int64_t RPM_MIN_DT_US = 50;
 
-        // CONSTANTS WITH REDUCER
-        // Velocity tunning
-        float Vel_Kp = 0.1f;    
-        float Vel_Ki = 0.01f;  
-        float Vel_Kd = 0.0f;
-        float Vel_LPF = 0.1f;   
+        // Tunings (Auto-configured by MOTOR_PROFILE macro)
+        float Vel_Kp  = CFG_VEL_KP;    
+        float Vel_Ki  = CFG_VEL_KI;  
+        float Vel_Kd  = CFG_VEL_KD;
+        float Vel_LPF = CFG_VEL_LPF;   
         float target_vel = 0.0f;
-        // Position tunning
-        float Pos_Kp = 20.0f;  
-        float Pos_Ki = 0.0f;    
-        float Pos_Kd = 0.0f; 
-        float Pos_LPF = 0.1f;  
+
+        float Pos_Kp  = CFG_POS_KP;  
+        float Pos_Ki  = CFG_POS_KI;    
+        float Pos_Kd  = CFG_POS_KD; 
+        float Pos_LPF = CFG_POS_LPF;  
         float target_pos = 0.0f;
-        // Current tunning
-        float Id_LPF = 0.05f;
-        float Iq_LPF = 0.05f;   
-        float Iq_Kp  = 0.1f;   float Iq_Ki = 10.0f;   float Iq_Kd = 0.0f;
-        float Id_Kp  = 0.1f;   float Id_Ki = 10.0f;   float Id_Kd = 0.0f;
+
+        float Id_LPF = CFG_ID_LPF;
+        float Iq_LPF = CFG_IQ_LPF;   
+        float Iq_Kp  = CFG_IQ_KP;   float Iq_Ki = CFG_IQ_KI;   float Iq_Kd = CFG_IQ_KD;
+        float Id_Kp  = CFG_ID_KP;   float Id_Ki = CFG_ID_KI;   float Id_Kd = CFG_ID_KD;
 
         float i_d_filt = 0.0f;
         float i_q_filt = 0.0f;
@@ -240,9 +348,9 @@ class DRV {
         bool foc_stop = false;
 
         // Reducer limits
-        float reducer_max_angle = 90.0f;      // Maximum allowed angle (degrees)
-        float reducer_min_angle = -90.0f;     // Minimum allowed angle (degrees)
-        bool reducer_limits_enabled = true;  // Disabled by default for safety during tuning
+        float reducer_max_angle = 90.0f;
+        float reducer_min_angle = -90.0f;
+        bool reducer_limits_enabled = true;
 
         // Position loop state
         float pos_error_integral = 0.0f;
@@ -283,32 +391,3 @@ class NTC_sensor {
 };
 
 #endif
-
-
-
-
-/*  VARIABLES NO REDUCER
-
-        // Velocity tunning
-        float Vel_Kp = 0.002f;
-        float Vel_Ki = 0.008f;
-        float Vel_Kd = 0.0f;
-        float Vel_LPF = 0.8f;
-        float target_vel = 0.0f;
-
-        // Position tunning
-        float Pos_Kp = 20.0f;
-        float Pos_Ki = 0.0f;
-        float Pos_Kd = 0.0f;
-        float Pos_LPF = 0.8f;
-        float target_pos = 0.0f;
-
-        // Current tunning
-        float Id_LPF = 0.8f;
-        float Iq_LPF = 0.8f;
-        float Iq_Kp  = 0.005f;   float Iq_Ki = 3.0f;   float Iq_Kd = 0.0f;
-        float Id_Kp  = 0.005f;   float Id_Ki = 3.0f;   float Id_Kd = 0.0f;
-        float i_d_filt = 0.0f;
-        float i_q_filt = 0.0f;
-
-*/

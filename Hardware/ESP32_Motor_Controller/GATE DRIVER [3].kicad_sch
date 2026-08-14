@@ -7629,7 +7629,25 @@
 			"ADcAbQBEAG8AZABCAHgAWgBLAG0AcABxAFkAVwBGAGgAZQBMAGsANwByAHYAdgA5AHYAUAB6AGsA"
 			"NQBVAEgAQQBBAEEAQQBBAEcAQQBEAGYAZgByADAAdQBmAHYAdQB1ADgAVgBKAFgAbAA1AGUAWgBt"
 			"AGEAbQByAEQAeQB3AEIAZwBvAGQAUgA2AFoANABQAE0AZgBiADIAMwB2AGgAdwBvAFcAUwBzAGcA"
-			"QQBBAEEAQQBBAEEAYgBPAGYAKw=="
+			"QQBBAEEAQQBBAEEAYgBPAGYAKwBaAEgAVgAzAGQAMwAvAG8AbwBZAGMAawA1AGcARQBBAEEAQQBB"
+			"AEEAYQBNAEcAdgBmAHYAVwByAG4AagAxADcAbQBnAC8AYgAyAHQAbwArACsATwBDAEQAagBvADQA"
+			"TwBpAFoARgBnAEkAUQBvAGQAeAAxAEYAZABYAGIAMQBxADEAUwBwAHgATQBtAFgASwBsAFAARAB3"
+			"AGMARgBsADUAQQBBAEEAQQBBAEEAQQBhAE0AVwB6AFkAcwBLAFMAawBKAEgARwB5AGQAZQB2AFcA"
+			"cwByAEkAeQBXAFgAbABnAE8AUQBvAGQAeAA3AEYAdQAzAGIAcQBLAGkAZwBwAHgAOAB1AGkAagBq"
+			"ADgAbwBLAEEAdwBBAEEAQQBBAEQAUQBsAEUAYwBmAGYAZABUAFoAKwBkADgAbABRAEYAMQBkADMA"
+			"ZgBmAGYAZgB5ADgAeABEAHkAeABFAG8AZQBNAGcAVABDAGIAVABwADUAOQArAEsAawA2AEcARABS"
+			"AHMAMgBjACsAWgBNAFcAWABrAEEAQQBBAEEAQQBBAEoAbwB5AGUAZgBMAGsAcwBXAFAASABpAHAA"
+			"TgB2AHYAdgBtAG0AbwBhAEYAQgBWAGgANQBZAGkARQBMAEgAUQBlAFQAbQA1AHUAYgBrADUASQBp"
+			"AFQAQgBRAHMAVwA5AE8ANwBkAFcAMQBZAGUAQQBBAEEAQQBBAEkAQwBtAGQATwB2AFcAYgBlAEgA"
+			"QwBoAGUASwBrAHUATABoADQAKwAvAGIAdABrAHUATABBAFUAaABRADYARAB1AEwAVABUAHoAOAAx"
+			"AG0AVQB6AG0AdwAyADcAZAB1AHQAMQAvAC8ALwAwAFMAOAB3AEEAQQBBAEEAQQBBAHQARwBiAHUA"
+			"MwBMAGwAKwBmAG4ANwBtAHcANAA2AE8AagBvADgALwAvAHAAaQBsAGsAZQAwAFUAaABZADQAagBP"
+			"AEgAMwA2ADkASgBvADEAYQA4AFQASgA5AE8AbgBUAFEAMABKAEMAWgBPAFUAQgBBAEEAQQBBAEEA"
+			"RwBqAFEANABNAEcARABiADcALwA5AGQAbgBHAFMAbgBwADUAZQBXAEYAZwBvAEsAdwA4AHMAUQBh"
+			"AEgAagBDAEQAWgBzADIASABEADIANwBGAGwAeAB3AG4ATABJAEEAQQBBAEEAQQBJAEEAcgAvAGYA"
+			"YQAzAHYAMwBWADEAZABUAFUAZgBOAGoAUQAwAEwARgB1ADIAVABHAEkAZQBkAEIAbQBGAGoAaQBQ"
+			"ADQAOABzAHMAdgB4AGMATwBBAGcASQBBAFoATQAyAFoASQB5AGcASQBBAEEAQQBBAEEAMABLADQA"
+			"SgBFAHkAYQBNAEcAVABOAEcAbg=="
 		)
 	)
 	(table
@@ -7652,7 +7670,7 @@
 				(color 25 0 0 1)
 			)
 		)
-		(column_widths 16.51 7.62 9.525 7.62)
+		(column_widths 16.51 7.62 9.525 12.7)
 		(row_heights 3.81 3.81 3.81 3.81 3.81 3.81 3.81)
 		(cells
 			(table_cell "Input Voltage"
@@ -7712,7 +7730,7 @@
 			(table_cell "36"
 				(exclude_from_sim no)
 				(at 50.8 16.51 0)
-				(size 7.62 3.81)
+				(size 12.7 3.81)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -7784,7 +7802,7 @@
 			(table_cell "16"
 				(exclude_from_sim no)
 				(at 50.8 20.32 0)
-				(size 7.62 3.81)
+				(size 12.7 3.81)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -7853,10 +7871,10 @@
 				)
 				(uuid "e96b09c1-44ac-4fcf-b3e9-1ea1104a6c9e")
 			)
-			(table_cell "42uH"
+			(table_cell "12uH"
 				(exclude_from_sim no)
 				(at 50.8 24.13 0)
-				(size 7.62 3.81)
+				(size 12.7 3.81)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -7922,10 +7940,10 @@
 				)
 				(uuid "b014dbc0-4fc2-4a87-b764-be8c60042b6c")
 			)
-			(table_cell "47uF"
+			(table_cell "22uF x 2"
 				(exclude_from_sim no)
 				(at 50.8 27.94 0)
-				(size 7.62 3.81)
+				(size 12.7 3.81)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -7990,10 +8008,10 @@
 				)
 				(uuid "d4832cc7-baed-4dc9-b269-427919b8cbae")
 			)
-			(table_cell "280k"
+			(table_cell "21.5k"
 				(exclude_from_sim no)
 				(at 50.8 31.75 0)
-				(size 7.62 3.81)
+				(size 12.7 3.81)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -8058,10 +8076,10 @@
 				)
 				(uuid "1a082fbe-5775-4e31-8ce0-c6f84a66bf21")
 			)
-			(table_cell "1nF"
+			(table_cell "6.8nF"
 				(exclude_from_sim no)
 				(at 50.8 35.56 0)
-				(size 7.62 3.81)
+				(size 12.7 3.81)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -8126,10 +8144,10 @@
 				)
 				(uuid "f8015b8b-babc-4984-9895-117a5cfb83de")
 			)
-			(table_cell ">5pF"
+			(table_cell "27pF"
 				(exclude_from_sim no)
 				(at 50.8 39.37 0)
-				(size 7.62 3.81)
+				(size 12.7 3.81)
 				(margins 0.9525 0.9525 0.9525 0.9525)
 				(span 1 1)
 				(fill
@@ -12070,7 +12088,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "12uH"
+		(property "Value" "22uF"
 			(at 80.01 71.1262 0)
 			(effects
 				(font
