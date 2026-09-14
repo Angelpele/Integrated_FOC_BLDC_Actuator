@@ -778,12 +778,14 @@ float DRV::real_RPM(float angle_deg) {
 
     // Exponential moving average (low pass filter to smooth noise)
     //rpm_filtered = RPM_LPF * raw_rpm + (1.0f - RPM_LPF) * rpm_filtered;
-
+    rpm_filtered = raw_rpm; // No filtering for now, just raw value
     rpm_last_angle = angle_deg;
     rpm_last_time  = now_us;
 
     return raw_rpm;
 }
+
+
 
 float DRV::reducer_angle(float motor_angle) {
     if (!initialized) {

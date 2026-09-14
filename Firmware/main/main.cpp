@@ -136,7 +136,7 @@ int initialize() {
     }
     vTaskDelay(pdMS_TO_TICKS(50));
 
-    hall_sensor.init(15); // 15 pole pairs for hover wheel, 7 pole pairs for 5010 motor
+    hall_sensor.init(CFG_MOTOR_POLE_PAIRS);
     mag.init();
     if (included_bmi) {
         if (bmi270.init() != BMI_OK) {
