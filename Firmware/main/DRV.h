@@ -28,14 +28,14 @@
     #define CFG_REDUCER_RATIO      1.0f
 
     // Current Loop Tuning
-    #define CFG_IQ_KP 0.15f
-    #define CFG_IQ_KI 20.0f
-    #define CFG_IQ_KD 0.0f
-    #define CFG_ID_KP 0.15f
-    #define CFG_ID_KI 20.0f
-    #define CFG_ID_KD 0.0f
-    #define CFG_ID_LPF 0.02f
-    #define CFG_IQ_LPF 0.02f
+    #define CFG_IQ_KP 63.0f
+    #define CFG_IQ_KI 30.0f
+    #define CFG_IQ_KD 0.03f
+    #define CFG_ID_KP 37.0f
+    #define CFG_ID_KI 30.0f
+    #define CFG_ID_KD 0.03f
+    #define CFG_ID_LPF 0.005f
+    #define CFG_IQ_LPF 0.005f
 
     // Velocity Loop Tuning
     #define CFG_VEL_KP  0.1f
@@ -367,7 +367,7 @@ class DRV {
         bool vel_initialized = false;
 
         // Velocity loop output clamp (Amps)
-        static constexpr float VEL_OUT_MAX = 8.0f;
+        static constexpr float VEL_OUT_MAX = 4.0f;
         // Position loop output clamp (RPM)
         static constexpr float POS_OUT_MAX = 500.0f;
     };
