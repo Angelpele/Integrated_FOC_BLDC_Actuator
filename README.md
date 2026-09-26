@@ -1,4 +1,4 @@
-# **FOC Controller for BLDC Motors**
+# **Integrated FOC BLDC Actuator**
 A portable, self-contained closed loop Field Oriented Controller (FOC) for Brushless DC (BLDC) motors built on the ESP32-S3 via a custom designed PCB.
 This project focuses on the development of a robust FOC controller for BLDC motors to be integrated into future robotic systems, such as robotic arms or other kind of robots. The controller combines the advantages of different motor technologies, offering:
 - The **speed** of a BLDC motor
