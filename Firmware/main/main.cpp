@@ -199,7 +199,8 @@ void controlLoop(void* arg){
             
         else if (fbk_sys == HALL) {
             local_angle = hall_sensor.getHallAngle();
-            local_rpm = drv.update_rpm(local_angle); // single call
+            local_rpm = hall_sensor.getRPM(); // single call
+            drv.set_last_rpm(local_rpm);
             local_reducer_angle = local_angle;
 
             xSemaphoreTake(fbk_mutex, portMAX_DELAY);

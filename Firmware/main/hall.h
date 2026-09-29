@@ -11,6 +11,7 @@ class HALL_SENSOR {
     public:
         void init(int pp);
         float getHallAngle();
+        float getRPM();
     private:
         uint8_t hallA = 0;
         uint8_t hallB = 0;

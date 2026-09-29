@@ -23,7 +23,7 @@
 //================================================================================================//
 #if (MOTOR_PROFILE == PROFILE_HOVERBOARD)
 
-    #define CFG_MOTOR_POLE_PAIRS   5
+    #define CFG_MOTOR_POLE_PAIRS   15
     #define CFG_MOTOR_RESISTANCE   0.4f
     #define CFG_REDUCER_RATIO      1.0f
 
@@ -34,14 +34,14 @@
     #define CFG_ID_KP 37.0f
     #define CFG_ID_KI 30.0f
     #define CFG_ID_KD 0.03f
-    #define CFG_ID_LPF 0.005f
-    #define CFG_IQ_LPF 0.005f
+    #define CFG_ID_LPF 0.001f
+    #define CFG_IQ_LPF 0.001f
 
     // Velocity Loop Tuning
     #define CFG_VEL_KP  0.1f
     #define CFG_VEL_KI  0.01f
     #define CFG_VEL_KD  0.0f
-    #define CFG_VEL_LPF 0.8f
+    #define CFG_VEL_LPF 0.05f
 
     // Position Loop Tuning
     #define CFG_POS_KP  20.0f
